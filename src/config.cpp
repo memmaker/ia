@@ -314,6 +314,12 @@ static void set_default_variables()
     s_audio_buffer_size = 512;
     s_renderer_type = RendererType::auto_select;
     s_is_fullscreen = true;
+#ifdef __EMSCRIPTEN__
+    // RVIP: browser page, windowed canvas
+    s_is_fullscreen = false;
+    s_window_px_w = 1000;
+    s_window_px_h = 700;
+#endif
     s_video_scale_factor = calc_default_video_scale_factor(native_res);
     s_brightness_pct = 100;
     s_text_mode_filled_walls = true;

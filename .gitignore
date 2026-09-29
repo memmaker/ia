@@ -27,3 +27,7 @@ GTAGS
 
 # Temporary files
 tmp/
+web/obj/
+web/obj-asan/
+web/dist/
+web/dist-asan/
