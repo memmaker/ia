@@ -156,9 +156,24 @@
 	RvipWM.dropdown($('btn-file'), $('menu-file'));
 	RvipWM.dropdown($('btn-audio'), $('menu-audio'));
 	$('btn-tiles').onclick = () => { if (app.running && Module._web_toggle_tiles) Module._web_toggle_tiles(); };
-	/* sound: stored here, wired to the game in stage 6 */
-	$('chk-sound').onchange = function () { L.sound = this.checked; saveLayout(); };
-	$('chk-music').onchange = function () { L.music = this.checked; saveLayout(); };
+	/* audio: the game's own samples and music (SDL_mixer), both off by default.
+	   The music file is not preloaded; it is fetched into the FS when Music goes on. */
+	const MUS = 'audio/musica_cthulhiana_fragment_madness.ogg';
+	let musFetched = false;
+	function applyAudio() {
+		if (!app.running || !Module._web_set_audio) return;
+		if (L.music && !musFetched) {
+			musFetched = true;
+			fetch(MUS).then(r => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); })
+				.then(b => { Module.FS.writeFile('/' + MUS, new Uint8Array(b)); applyAudio(); })
+				.catch(e => { musFetched = false; console.warn('music: ' + e); });
+			Module._web_set_audio(L.sound ? 1 : 0, 0);
+			return;
+		}
+		Module._web_set_audio(L.sound ? 1 : 0, L.music && Module.FS.analyzePath('/' + MUS).exists ? 1 : 0);
+	}
+	$('chk-sound').onchange = function () { L.sound = this.checked; saveLayout(); applyAudio(); this.blur(); };
+	$('chk-music').onchange = function () { L.music = this.checked; saveLayout(); applyAudio(); this.blur(); };
 	fetch('fonts.json').then(r => r.json()).then(list => {
 		for (const n of list) { const o = document.createElement('option'); o.value = n; o.textContent = n.replace(/^Web(Plus|437)_/, '').replace(/_/g, ' '); $('sel-font').appendChild(o); }
 		$('sel-font').value = face;
@@ -192,7 +207,7 @@
 				Module.removeRunDependency('idbfs');
 			});
 		}],
-		onRuntimeInitialized: () => { app.running = true; app.status(''); },
+		onRuntimeInitialized: () => { app.running = true; app.status(''); applyAudio(); },
 	};
 	window.iaPage = { app, L: () => L };
 })();

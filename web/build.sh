@@ -17,8 +17,10 @@ mkdir -p "$OBJ" "$DIST"
 SRCS=$( { grep -oE 'src/[a-z_0-9]+\.cpp' CMakeLists.txt; echo third_party/tinyxml2/tinyxml2.cpp; } | sort -u)
 export CXXFLAGS OBJ
 echo "$SRCS" | xargs -P "$JOBS" -n 1 sh -c 'o=$OBJ/$(echo "$0" | tr / _).o; [ "$o" -nt "$0" ] || em++ $CXXFLAGS -c "$0" -o "$o"'
-em++ $LDFLAGS "$OBJ"/*.o -o "$DIST/ia.js" --preload-file installed_files@/
+em++ $LDFLAGS "$OBJ"/*.o -o "$DIST/ia.js" --preload-file installed_files@/ --exclude-file "*musica_*"
 cp web/index.html web/page.js "$DIST/"
+mkdir -p "$DIST/audio" && cp installed_files/audio/musica_*.ogg "$DIST/audio/"
+python3 web/make-help.py "$DIST/help.html"
 # list icons: the game's own tiles at their original size (the page masks them with the item colour)
 rm -rf "$DIST/gfx" && mkdir -p "$DIST/gfx/tiles" && cp -R installed_files/gfx/tiles/20x20 "$DIST/gfx/tiles/"
 # text fonts: the index page's fonts/ (served at ../fonts/ next to the games)

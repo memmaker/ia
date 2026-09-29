@@ -16,6 +16,14 @@
 #include <type_traits>
 #include <vector>
 
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+// Page Audio toggles (both off by default); music file is fetched by the page.
+static bool s_web_sfx = false;
+static bool s_web_music = false;
+static bool s_web_music_wanted = false;
+#endif
+
 #include "SDL_events.h"
 #include "SDL_mixer.h"
 #include "SDL_timer.h"
@@ -265,8 +273,13 @@ void init()
         paths::audio_dir() +
         "musica_cthulhiana_fragment_madness.ogg";
 
+#ifdef __EMSCRIPTEN__
+    // Loaded lazily in play_music() (the page fetches it when Music goes on).
+    (void)music_path;
+#else
     s_mus_chunks[(size_t)MusId::cthulhiana_madness] =
         Mix_LoadMUS(music_path.c_str());
+#endif
 
     set_music_volume(config::master_volume_pct());
 
@@ -303,6 +316,12 @@ void cleanup()
 
 void play(const SfxId sfx, int vol_pct_tot, const int vol_pct_l)
 {
+#ifdef __EMSCRIPTEN__
+    if (!s_web_sfx) {
+        return;
+    }
+#endif
+
     if (config::master_volume_pct() == 0) {
         return;
     }
@@ -454,6 +473,25 @@ void try_play_ambient(const int one_in_n_chance_to_play)
 
 void play_music(const MusId mus)
 {
+#ifdef __EMSCRIPTEN__
+    s_web_music_wanted = true;
+
+    if (!s_web_music) {
+        return;
+    }
+
+    if (!s_mus_chunks.empty() && !s_mus_chunks[(size_t)mus]) {
+        s_mus_chunks[(size_t)mus] = Mix_LoadMUS(
+            (paths::audio_dir() +
+             "musica_cthulhiana_fragment_madness.ogg")
+                .c_str());
+    }
+
+    if (s_mus_chunks.empty() || !s_mus_chunks[(size_t)mus]) {
+        return;
+    }
+#endif
+
     if (config::master_volume_pct() == 0) {
         return;
     }
@@ -476,6 +514,9 @@ void play_music(const MusId mus)
 
 void fade_out_music()
 {
+#ifdef __EMSCRIPTEN__
+    s_web_music_wanted = false;
+#endif
     Mix_FadeOutMusic(2000);
 }
 
@@ -485,3 +526,32 @@ void set_music_volume(int volume_pct)
 }
 
 }  // namespace audio
+
+#ifdef __EMSCRIPTEN__
+extern "C" {
+// Page Audio ▾ toggles.
+EMSCRIPTEN_KEEPALIVE void web_set_audio(const int sfx, const int music)
+{
+    s_web_sfx = sfx != 0;
+
+    const bool was_music = s_web_music;
+
+    s_web_music = music != 0;
+
+    if (!s_web_sfx) {
+        Mix_HaltChannel(-1);
+    }
+
+    if (was_music && !s_web_music) {
+        const bool wanted = s_web_music_wanted;
+
+        Mix_HaltMusic();
+
+        s_web_music_wanted = wanted;
+    }
+    else if (!was_music && s_web_music && s_web_music_wanted) {
+        audio::play_music(audio::MusId::cthulhiana_madness);
+    }
+}
+}  // extern "C"
+#endif
