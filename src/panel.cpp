@@ -50,6 +50,26 @@ static void finalize_screen_dims()
 
 static void set_game_state_panels(const P& max_gui_dims)
 {
+#ifdef __EMSCRIPTEN__
+    // RVIP: the map fills the canvas; the status panel and the message rows
+    // are captured as text for the page's windows (web.cpp), drawn nowhere.
+    // They overlap the map so they never make the screen bigger.
+    {
+        const int status_w = std::min(23, max_gui_dims.x);
+        const int log_rows = (int)msg_log::g_nr_log_lines;
+
+        set_panel_area(Panel::map, 0, 0, max_gui_dims.x - 1, max_gui_dims.y - 1);
+
+        set_panel_area(Panel::log, 0, 0, max_gui_dims.x - 1, log_rows - 1);
+
+        set_panel_area(Panel::map_gui_stats_border, 0, 0, status_w - 1, max_gui_dims.y - 1);
+
+        set_panel_area(Panel::map_gui_stats, 1, 1, status_w - 2, max_gui_dims.y - 2);
+
+        return;
+    }
+#endif  // __EMSCRIPTEN__
+
     constexpr int map_gui_stats_border_w = 23;
 
     const int map_gui_border_x0 = max_gui_dims.x - map_gui_stats_border_w;

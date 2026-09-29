@@ -50,6 +50,10 @@ static void handle_args(int argc, char** argv)
 // -----------------------------------------------------------------------------
 // main
 // -----------------------------------------------------------------------------
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#endif
+
 int main(int argc, char** argv)
 {
     TRACE_FUNC_BEGIN;
@@ -71,6 +75,11 @@ int main(int argc, char** argv)
     init::cleanup_session();
     init::cleanup_game();
     init::cleanup_io();
+
+#ifdef __EMSCRIPTEN__
+    // RVIP: Quit from the main menu - the page syncs and reloads
+    emscripten_run_script("Module.onQuit && Module.onQuit()");
+#endif  // __EMSCRIPTEN__
 
     return 0;
 }

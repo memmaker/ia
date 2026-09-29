@@ -574,7 +574,10 @@ void draw()
         Panel::map_gui_stats_border,
         colors::extra_dark_gray());
 
+#ifndef __EMSCRIPTEN__
+    // RVIP: the page shows the status as text in its own window
     draw_box(panels::area(Panel::map_gui_stats_border));
+#endif
 
     const Panel panel = Panel::map_gui_stats;
 

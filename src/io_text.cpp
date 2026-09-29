@@ -11,6 +11,7 @@
 #include <string>
 
 #include "colors.hpp"
+#include "web.hpp"
 #include "config.hpp"
 #include "io.hpp"
 #include "io_internal.hpp"
@@ -104,6 +105,11 @@ void draw_text(
     for (const TextAction& action : text.actions()) {
         switch (action.id) {
         case TextActionId::write_str: {
+            if (web::capture_text(panel, pos, action.str, color)) {
+                pos.x += (int)action.str.length();
+                break;
+            }
+
             const P px_pos = gui_to_px_coords(panel, pos);
 
             draw_text_at_px(
@@ -145,6 +151,10 @@ void draw_text_center(
     const int len_half = len / 2;
     const int x_pos_left = pos.x - len_half;
 
+    if (web::capture_text(panel, {x_pos_left, pos.y}, str, color)) {
+        return;
+    }
+
     P px_pos = gui_to_px_coords(panel, {x_pos_left, pos.y});
 
     if (is_pixel_pos_adj_allowed) {
@@ -168,6 +178,10 @@ void draw_text_right(
     const Color& bg_color)
 {
     const int x_pos_left = pos.x - (int)str.size() + 1;
+
+    if (web::capture_text(panel, {x_pos_left, pos.y}, str, color)) {
+        return;
+    }
 
     P px_pos = gui_to_px_coords(panel, {x_pos_left, pos.y});
 

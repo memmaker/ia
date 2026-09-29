@@ -5,6 +5,7 @@
 // =============================================================================
 
 #include "highscore.hpp"
+#include "web.hpp"
 
 #include <algorithm>
 #include <fstream>
@@ -71,6 +72,10 @@ static void write_file(std::vector<HighscoreEntry>& entries)
         f << (int)entry.bg << "\n";
         f << entry.is_latest_entry << "\n";
     }
+
+    f.close();
+
+    web::sync();
 }
 
 static std::vector<HighscoreEntry> read_highscores_file()

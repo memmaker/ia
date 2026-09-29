@@ -5,6 +5,7 @@
 // =============================================================================
 
 #include "io.hpp"
+#include "web.hpp"
 
 #include <cstdint>
 
@@ -274,6 +275,8 @@ void on_window_resized()
 
     update_rendering_offsets();
 
+    web::on_window_size();
+
     states::on_window_resized();
 }
 
@@ -319,6 +322,8 @@ void update_screen()
 #endif  // NDEBUG
 
     SDL_RenderPresent(g_sdl_renderer);
+
+    web::flush();
 
 #ifndef NDEBUG
     if (is_game_state) {

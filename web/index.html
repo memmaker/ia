@@ -1,4 +1,107 @@
-<!doctype html><meta charset=utf-8><title>Infra Arcana</title>
-<body style="margin:0;background:#000;color:#ccc"><canvas id=canvas style="image-rendering:pixelated" tabindex=-1 oncontextmenu="event.preventDefault()"></canvas>
-<script>var Module={canvas:document.getElementById('canvas'),print:console.log,printErr:console.warn};</script>
-<script src=ia.js></script>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Infra Arcana</title>
+<meta name="description" content="Play Infra Arcana in your browser: Martin Törnqvist's Lovecraftian roguelike set in the 1920s. Descend beneath the Church of Starry Wisdom with dynamite, Tommy guns and forbidden rites, keeping your sanity as long as you can.">
+<style>
+	:root { --bg: #0b0b0d; --panel: #16161a; --line: #2b2b33; --text: #d8d8de; --dim: #8a8a96; --accent: #d9b24c;
+		--gut: #1d1d23; --gut-hover: #d9b24c; }
+	* { box-sizing: border-box; }
+	html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+		font: 13px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; overflow: hidden; }
+	#bar { display: flex; align-items: center; gap: 6px; padding: 4px 8px; background: var(--panel);
+		border-bottom: 1px solid var(--line); height: 32px; white-space: nowrap; overflow: hidden; }
+	#bar h1 { font-size: 14px; margin: 0 8px 0 0; color: var(--accent); letter-spacing: .04em; }
+	#bar h1 a { color: inherit; text-decoration: none; }
+	#bar .sep { width: 1px; height: 18px; background: var(--line); margin: 0 4px; flex: none; }
+	#bar .sp { flex: 1; }
+	#bar .hint { color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+	#bar .hint kbd { font-size: 11px; line-height: 1.3; min-width: 0; }
+	button { background: #22222a; color: var(--text); border: 1px solid var(--line); border-radius: 4px;
+		padding: 2px 10px; font: inherit; cursor: pointer; }
+	button:hover { border-color: var(--accent); }
+	#bar select { background: #22222a; color: var(--text); border: 1px solid var(--line); border-radius: 4px; padding: 2px 6px; font: inherit; }
+	#status { position: fixed; left: 50%; top: 40px; transform: translateX(-50%); z-index: 5;
+		background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 8px 14px; max-width: 90vw; }
+	#status.error { border-color: #b44; color: #f99; }
+	#status[hidden], #help[hidden] { display: none; }
+	#game { position: absolute; left: 0; right: 0; top: 32px; bottom: 0; overflow: hidden; background: var(--gut); }
+	.win { position: absolute; background: #000; border: 1px solid var(--line); display: flex; flex-direction: column; overflow: hidden; }
+	.win > .t { flex: none; display: flex; align-items: center; font-size: 11px; height: 20px; padding: 0 2px 0 6px;
+		background: var(--panel); color: var(--dim); border-bottom: 1px solid var(--line); }
+	.win > .t .name { flex: 1; }
+	.win > .body { flex: 1; min-height: 0; overflow: hidden; position: relative; }
+	/* the game's own screen (map and its pop-ups), drawn by SDL at the window's size */
+	#map { overflow: hidden; }
+	#canvas { display: block; image-rendering: pixelated; outline: none; }
+	.txt { margin: 0; padding: 4px 8px; font: 13px/1.35 ui-monospace, Menlo, monospace; white-space: pre; color: #dcdcdc; }
+	.body .txt { font-size: inherit; }
+	#msg { padding: 3px 8px; font-family: ui-monospace, Menlo, monospace; line-height: 1.4; }
+	#status-win, #msg, #inv, #vis { font-size: 13px; }
+	#inv .h { color: var(--dim); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; margin-top: 4px; }
+	#inv .row { display: flex; align-items: center; gap: 6px; white-space: pre; }
+	#inv .row b { flex: none; min-width: 1.2em; text-align: center; font-weight: normal; }
+	/* list icon: the game's own tile at its size, coloured like the game does (grey tile x colour) */
+	.ic { flex: none; display: inline-block; width: 20px; height: 20px; background: currentColor;
+		-webkit-mask: var(--m) 0 0 / 20px 20px no-repeat; mask: var(--m) 0 0 / 20px 20px no-repeat; mask-mode: luminance; }
+	#t-map .wm-topl { font-size: 13px; }
+	kbd { display: inline-block; min-width: 1.7em; padding: 0 6px; text-align: center; font: 600 12px/1.6 ui-monospace, Menlo, monospace;
+		background: #22222a; border: 1px solid #3a3a46; border-bottom-width: 2px; border-radius: 4px; color: var(--text); }
+	#help { position: fixed; inset: 0; background: rgba(0,0,0,.75); display: flex; align-items: center; justify-content: center; z-index: 10; }
+	#help .panel { position: relative; background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+		width: min(980px, calc(100vw - 32px)); height: calc(100vh - 64px); display: flex; flex-direction: column; }
+	#help .head { display: flex; align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--line); }
+	#help .head h2 { margin: 0; font-size: 16px; color: var(--accent); flex: 1; }
+	#help-body { overflow: auto; padding: 4px 24px 32px; outline: none; font-size: 14px; line-height: 1.6; }
+</style>
+</head>
+<body>
+<div id="bar">
+	<h1>Infra Arcana</h1>
+	<button id="btn-help" title="Game guide and controls">Help</button>
+	<button id="btn-file" title="Save file and new game">File ▾</button>
+	<span class="sep"></span>
+	<button id="btn-layout" title="Windows: layout, show and hide">Windows ▾</button>
+	<button id="btn-tiles" title="Map: the game's own tiles or text">Tiles</button>
+	<select id="sel-font" title="Font for the text windows (the map is the game's own screen)"><option value="">Font: default</option></select>
+	<button id="btn-audio" title="Sound effects and music">Audio ▾</button>
+	<div id="menu-audio">
+		<label title="Sound effects on or off"><input type="checkbox" id="chk-sound"> Sound effects</label>
+		<label title="Music on or off"><input type="checkbox" id="chk-music"> Music</label>
+	</div>
+	<div id="menu-file">
+		<button id="btn-export" title="Download your saved character">Export save</button>
+		<button id="btn-import" title="Load a saved character from disk">Import save</button>
+		<hr>
+		<button id="btn-new" title="Delete the saved character in this browser">New game</button>
+	</div>
+	<input type="file" id="import-file" hidden>
+	<span class="sp"></span>
+	<span class="hint"><kbd>X</kbd> explore · <kbd>&gt;</kbd> stairs · <kbd>i</kbd> inventory · <kbd>Enter</kbd> command menu · <kbd>?</kbd> manual</span>
+</div>
+
+<div id="status">Loading Infra Arcana…</div>
+
+<div id="game">
+	<div class="win" id="t-map"><div class="t"><span class="name">Map</span></div><div class="body" id="map"><canvas id="canvas" tabindex="-1" oncontextmenu="event.preventDefault()"></canvas></div></div>
+	<div class="win" id="t-status"><div class="t"><span class="name">Status</span></div><div class="body" id="status-win"><pre class="txt" id="status-body"></pre></div></div>
+	<div class="win" id="t-msg"><div class="t"><span class="name">Log messages</span></div><div class="body" id="msg" aria-label="Messages"></div></div>
+	<div class="win" id="t-inv"><div class="t"><span class="name">Inventory</span></div><div class="body wm-list" id="inv"></div></div>
+	<div class="win" id="t-vis"><div class="t"><span class="name">Visible</span></div><div class="body wm-list" id="vis"></div></div>
+</div>
+
+<div id="help" hidden>
+	<div class="panel" role="dialog" aria-label="Infra Arcana guide">
+		<div class="head"><h2>Infra Arcana guide</h2><button id="help-close">Close</button></div>
+		<div id="help-body" tabindex="-1">Loading…</div>
+	</div>
+</div>
+
+<script src="../rvip-wm.js"></script>
+<script src="../rvip-app.js"></script>
+<script src="page.js"></script>
+<script src="ia.js"></script>
+</body>
+</html>

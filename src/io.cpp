@@ -5,6 +5,7 @@
 // =============================================================================
 
 #include "io.hpp"
+#include "web.hpp"
 
 #include <algorithm>
 #include <cstddef>
@@ -740,6 +741,10 @@ void draw_tile(const TileDrawObj& obj)
 
 void cover_panel(const Panel panel, const Color& color)
 {
+    if (web::capture_cover(panel)) {
+        return;
+    }
+
     const auto px_area = gui_to_px_rect(panels::area(panel));
 
     draw_rectangle_filled(px_area, color);

@@ -688,6 +688,22 @@ void add_line_to_history(const std::string& line_to_add)
     }
 }
 
+// RVIP: the messages still in the log rows (not yet in the history)
+std::vector<Msg> web_current()
+{
+    std::vector<Msg> result;
+
+    for (const auto& line : s_lines) {
+        for (const auto& msg : line.messages) {
+            if (msg.should_copy_to_history() == CopyToMsgHistory::yes) {
+                result.push_back(msg);
+            }
+        }
+    }
+
+    return result;
+}
+
 std::vector<Msg> history()
 {
     std::vector<Msg> result;

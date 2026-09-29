@@ -53,6 +53,10 @@ std::string font_name();
 bool always_center_view_on_player();
 RendererType renderer_type();
 bool is_tiles_mode();
+
+// RVIP web page: Tiles button, Map A-/A+
+void web_toggle_tiles();
+void web_set_scale(int scale);
 void set_fullscreen(bool value);
 bool is_fullscreen();
 int video_scale_factor();

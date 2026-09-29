@@ -5,6 +5,7 @@
 // =============================================================================
 
 #include "saving.hpp"
+#include "web.hpp"
 
 #include <algorithm>
 #include <cstddef>
@@ -136,6 +137,8 @@ static void write_file()
 
         file.close();
     }
+
+    web::sync();
 }
 
 static void read_file()

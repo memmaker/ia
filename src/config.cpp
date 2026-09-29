@@ -5,6 +5,7 @@
 // =============================================================================
 
 #include "config.hpp"
+#include "web.hpp"
 
 #include <algorithm>
 #include <cstddef>
@@ -486,6 +487,8 @@ static void write_config_file()
     ini_file.generate(ini);
 
     TRACE_FUNC_END;
+
+    web::sync();
 }
 
 static std::vector<std::string> make_user_data_info_lines()
@@ -585,6 +588,28 @@ void init()
     }
 
     update_render_dims();
+
+    // RVIP: the page decides the canvas size and scale
+    web::config_override(s_window_px_w, s_window_px_h, s_video_scale_factor, s_is_fullscreen);
+}
+
+void web_toggle_tiles()
+{
+    s_is_tiles_mode = !s_is_tiles_mode;
+
+    update_render_dims();
+    io::init_other();
+
+    write_config_file();
+}
+
+void web_set_scale(const int scale)
+{
+    s_video_scale_factor = scale;
+
+    write_config_file();
+
+    io::on_user_toggle_scaling();
 }
 
 InputMode input_mode()

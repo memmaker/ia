@@ -146,6 +146,9 @@ void add_line_to_history(const std::string& line_to_add);
 
 std::vector<Msg> history();
 
+// RVIP web page: messages still in the log rows
+std::vector<Msg> web_current();
+
 }  // namespace msg_log
 
 // -----------------------------------------------------------------------------

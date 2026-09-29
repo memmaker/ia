@@ -338,6 +338,7 @@ set(COMMON_SRC
     src/throwing.cpp
     src/time.cpp
     src/version.cpp
+    src/web.cpp
     src/view.cpp
     src/view_actor_descr.cpp
     src/viewport.cpp

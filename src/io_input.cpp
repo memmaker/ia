@@ -8,6 +8,7 @@
 #include <ostream>
 
 #include "SDL_events.h"
+#include "web.hpp"
 #include "SDL_keyboard.h"
 #include "SDL_keycode.h"
 #include "SDL_timer.h"
@@ -584,6 +585,11 @@ InputData read_input()
     //
     while (!s_is_done_reading_input) {
         sleep(1);
+
+        // RVIP: canvas size, scale and tiles switches from the page
+        if (web::poll()) {
+            s_is_window_resized = true;
+        }
 
         if (!config::is_fullscreen()) {
             if (s_is_window_resized) {

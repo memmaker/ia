@@ -5,6 +5,7 @@
 // =============================================================================
 
 #include "actor_act.hpp"
+#include "web.hpp"
 
 #include <algorithm>
 #include <cstddef>
@@ -341,7 +342,11 @@ static void player_act()
         // Clear all previous input to avoid queueing up commands.
         io::clear_input();
 
+        web::set_at_cmd(true);
+
         const io::InputData input = io::read_input();
+
+        web::set_at_cmd(false);
 
         const GameCmd game_cmd = game_commands::to_cmd(input);
 

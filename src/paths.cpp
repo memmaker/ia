@@ -166,6 +166,13 @@ void init()
 
     std::string user_dir = read_user_dir_from_ini_file();
 
+#ifdef __EMSCRIPTEN__
+    // RVIP: the page's IndexedDB folder (IDBFS mount, RvipApp.dir)
+    if (getenv("IA_USER_DIR")) {
+        user_dir = getenv("IA_USER_DIR");
+    }
+#endif  // __EMSCRIPTEN__
+
     TRACE
         << "User data path set from "
         << s_user_data_ini_file_name
