@@ -16,6 +16,7 @@
 #include "colors.hpp"
 #include "panel.hpp"
 #include "pos.hpp"
+#include "rect.hpp"
 
 namespace web
 {
@@ -24,6 +25,17 @@ bool capture_text(Panel panel, P pos, const std::string& str, const Color& color
 
 // cover_panel() on a captured panel: clears it, nothing drawn.
 bool capture_cover(Panel panel);
+
+
+// Pop-up capture: while a text state over the game (menu, pop-up, inventory,
+// character sheet...) draws, all its text goes to one screen-cell grid that
+// the page shows as an HTML pop-up; boxes, fills and tiles are not drawn.
+void popup_clear();
+void popup_begin();
+void popup_end();
+bool popup_capturing();
+void popup_cover(Panel panel, const R& area);
+void popup_char(Panel panel, P pos, char c, const Color& color);
 
 // After each SDL_RenderPresent: send what changed to the page.
 void flush();

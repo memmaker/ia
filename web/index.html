@@ -47,6 +47,10 @@
 	.ic { flex: none; display: inline-block; width: 20px; height: 20px; background: currentColor;
 		-webkit-mask: var(--m) 0 0 / 20px 20px no-repeat; mask: var(--m) 0 0 / 20px 20px no-repeat; mask-mode: luminance; }
 	#t-map .wm-topl { font-size: 13px; }
+	/* the game's menus, pop-ups and full-screen screens (inventory, character sheet), sent as text by the game */
+	#pop { position: absolute; z-index: 3; background: #000; border: 1px solid var(--line); box-shadow: 0 6px 24px rgba(0,0,0,.7);
+		overflow: auto; line-height: 1.25; }
+	#pop[hidden] { display: none; }
 	kbd { display: inline-block; min-width: 1.7em; padding: 0 6px; text-align: center; font: 600 12px/1.6 ui-monospace, Menlo, monospace;
 		background: #22222a; border: 1px solid #3a3a46; border-bottom-width: 2px; border-radius: 4px; color: var(--text); }
 	#help { position: fixed; inset: 0; background: rgba(0,0,0,.75); display: flex; align-items: center; justify-content: center; z-index: 10; }
@@ -85,7 +89,7 @@
 <div id="status">Loading Infra Arcana…</div>
 
 <div id="game">
-	<div class="win" id="t-map"><div class="t"><span class="name">Map</span></div><div class="body" id="map"><canvas id="canvas" tabindex="-1" oncontextmenu="event.preventDefault()"></canvas></div></div>
+	<div class="win" id="t-map"><div class="t"><span class="name">Map</span></div><div class="body" id="map"><canvas id="canvas" tabindex="-1" oncontextmenu="event.preventDefault()"></canvas><pre class="txt" id="pop" hidden></pre></div></div>
 	<div class="win" id="t-status"><div class="t"><span class="name">Status</span></div><div class="body" id="status-win"><pre class="txt" id="status-body"></pre></div></div>
 	<div class="win" id="t-msg"><div class="t"><span class="name">Log messages</span></div><div class="body" id="msg" aria-label="Messages"></div></div>
 	<div class="win" id="t-inv"><div class="t"><span class="name">Inventory</span></div><div class="body wm-list" id="inv"></div></div>

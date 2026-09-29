@@ -29,6 +29,22 @@
 		if (!b.clientWidth) return;
 		if (app.running && Module._web_resize) Module._web_resize(b.clientWidth, b.clientHeight);
 		placeCanvas();
+		placePop();
+	}
+	/* pop-up text: the game's grid as sent (colours from the game), centred on the map, text size = Log messages */
+	function placePop() {
+		const p = $('pop');
+		if (p.hidden) return;
+		p.style.fontSize = RvipWM.fontSize('msg') + 'px';
+		RvipWM.popup(p, { center: true });
+	}
+	function showPop(s) {
+		const p = $('pop'), same = !p.hidden && !!s;
+		p.innerHTML = s; p.hidden = !s;
+		if (!s) return;
+		const st = p.scrollTop;
+		placePop();
+		if (same) p.scrollTop = st;
 	}
 	function placeCanvas() {
 		const b = $('map'), c = $('canvas');
@@ -116,6 +132,7 @@
 			placeCanvas();
 			break;
 		}
+		case 9: showPop(s); break;
 		}
 	}
 

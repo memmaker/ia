@@ -27,6 +27,7 @@
 #include "item.hpp"
 #include "map.hpp"
 #include "msg_log.hpp"
+#include "panel.hpp"
 #include "state.hpp"
 
 // clang-format off
@@ -54,6 +55,7 @@ enum Kind
     k_tile_names = 6,
     k_tiles_mode = 7,
     k_canvas = 8,
+    k_popup = 9,
 };
 
 // Minimum GUI size: the game's full-screen menus are 78 cells wide.
@@ -64,15 +66,20 @@ struct Cell
 {
     char ch {' '};
     Color color {};
+    // Pop-up only: inside a box a later state covered (a menu over a screen)
+    bool box {false};
 };
 
 using Grid = std::vector<std::vector<Cell>>;
 
 Grid s_status;
 Grid s_log;
+Grid s_pop;
+bool s_pop_on = false;
+int s_pop_layer = 0;
 
 // "\x01": nothing sent yet (an empty list must be sent too)
-std::string s_sent[9] = {"\x01", "\x01", "\x01", "\x01", "\x01", "\x01", "\x01", "\x01", "\x01"};
+std::string s_sent[10] = {"\x01", "\x01", "\x01", "\x01", "\x01", "\x01", "\x01", "\x01", "\x01", "\x01"};
 
 bool s_at_cmd = false;
 bool s_at_cmd_sent = false;
@@ -157,25 +164,33 @@ std::string grid_html(const Grid& grid)
     for (const auto& row : grid) {
         int end = (int)row.size();
 
-        while (end > 0 && row[end - 1].ch == ' ') {
+        while (end > 0 && row[end - 1].ch == ' ' && !row[end - 1].box) {
             --end;
         }
 
         std::string line;
         bool open = false;
         Color cur;
+        bool cur_box = false;
 
         for (int x = 0; x < end; ++x) {
             const Cell& cell = row[x];
 
-            if (cell.ch != ' ' && (!open || cell.color != cur)) {
+            if (open && cell.box != cur_box) {
+                line += "</span>";
+                open = false;
+            }
+
+            if ((cell.ch != ' ' || cell.box) && (!open || (cell.ch != ' ' && cell.color != cur))) {
                 if (open) {
                     line += "</span>";
                 }
 
-                line += "<span style=\"color:" + css(cell.color) + "\">";
+                line += "<span style=\"color:" + css(cell.color) +
+                    (cell.box ? ";background:#1c1c26" : "") + "\">";
                 open = true;
                 cur = cell.color;
+                cur_box = cell.box;
             }
 
             html_escape(line, cell.ch);
@@ -231,6 +246,42 @@ std::string grid_text(const Grid& grid)
     }
 
     return out;
+}
+
+// The pop-up grid cut to the bounding box of its non-blank cells.
+std::string popup_html()
+{
+    int x0 = 1 << 20;
+
+    for (const auto& row : s_pop) {
+        for (int x = 0; x < (int)row.size(); ++x) {
+            if (row[x].ch != ' ' || row[x].box) {
+                x0 = std::min(x0, x);
+                break;
+            }
+        }
+    }
+
+    if (x0 == (1 << 20)) {
+        return "";
+    }
+
+    Grid g;
+    bool top = true;
+
+    for (const auto& row : s_pop) {
+        const bool blank = std::all_of(std::begin(row), std::end(row), [](const Cell& c) { return c.ch == ' ' && !c.box; });
+
+        if (top && blank) {
+            continue;
+        }
+
+        top = false;
+
+        g.emplace_back(x0 < (int)row.size() ? std::vector<Cell>(std::begin(row) + x0, std::end(row)) : std::vector<Cell>());
+    }
+
+    return grid_html(g);
 }
 
 bool is_in_game()
@@ -409,7 +460,12 @@ namespace web
 {
 bool capture_text(const Panel panel, P pos, const std::string& str, const Color& color)
 {
-    Grid* const grid = grid_for(panel);
+    Grid* grid = grid_for(panel);
+
+    if (s_pop_on) {
+        grid = &s_pop;
+        pos += panels::p0(panel);
+    }
 
     if (!grid) {
         return false;
@@ -431,7 +487,7 @@ bool capture_text(const Panel panel, P pos, const std::string& str, const Color&
                 row.resize(pos.x + 1);
             }
 
-            row[pos.x] = {c, color};
+            row[pos.x] = {c, color, row[pos.x].box};
         }
 
         ++pos.x;
@@ -442,6 +498,10 @@ bool capture_text(const Panel panel, P pos, const std::string& str, const Color&
 
 bool capture_cover(const Panel panel)
 {
+    if (s_pop_on) {
+        return true;
+    }
+
     Grid* const grid = grid_for(panel);
 
     if (!grid) {
@@ -453,6 +513,60 @@ bool capture_cover(const Panel panel)
     }
 
     return true;
+}
+
+void popup_clear()
+{
+    s_pop.clear();
+    s_pop_layer = 0;
+}
+
+void popup_begin()
+{
+    s_pop_on = true;
+}
+
+void popup_end()
+{
+    if (s_pop_on) {
+        ++s_pop_layer;
+    }
+
+    s_pop_on = false;
+}
+
+bool popup_capturing()
+{
+    return s_pop_on;
+}
+
+void popup_cover(const Panel panel, const R& area)
+{
+    {
+        const P p0 = panels::p0(panel);
+
+        for (int y = std::max(0, area.p0.y + p0.y); y <= std::min(200, area.p1.y + p0.y); ++y) {
+            if ((int)s_pop.size() <= y) {
+                s_pop.resize(y + 1);
+            }
+
+            auto& row = s_pop[y];
+
+            for (int x = std::max(0, area.p0.x + p0.x); x <= std::min(299, area.p1.x + p0.x); ++x) {
+                if ((int)row.size() <= x) {
+                    row.resize(x + 1);
+                }
+
+                // A cover over nothing (the first screen) is plain background.
+                row[x] = {' ', {}, s_pop_layer > 0};
+            }
+        }
+    }
+}
+
+void popup_char(const Panel panel, const P pos, const char c, const Color& color)
+{
+    capture_text(panel, pos, std::string(1, c), color);
 }
 
 void flush()
@@ -467,6 +581,8 @@ void flush()
         send(k_status, "");
         send(k_prompt, "");
     }
+
+    send(k_popup, popup_html());
 
     send(k_msgs, messages());
     send(k_inv, inventory_list());
@@ -592,6 +708,11 @@ namespace web
 {
 bool capture_text(Panel, P, const std::string&, const Color&) { return false; }
 bool capture_cover(Panel) { return false; }
+void popup_clear() {}
+void popup_begin() {}
+void popup_end() {}
+bool popup_capturing() { return false; }
+void popup_char(Panel, P, char, const Color&) {}
 void flush() {}
 void set_at_cmd(bool) {}
 bool poll() { return false; }

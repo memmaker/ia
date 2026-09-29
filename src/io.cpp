@@ -688,6 +688,11 @@ void draw_character_at_px(
 
 void draw_character(const CharacterDrawObj& obj)
 {
+    if (web::popup_capturing()) {
+        web::popup_char(obj.panel, obj.pos, obj.character, obj.color);
+        return;
+    }
+
     const P px_pos = gui_to_px_coords(obj.panel, obj.pos);
 
     draw_character_at_px(obj.character, px_pos, obj.color, obj.draw_bg, obj.bg_color);
@@ -695,6 +700,10 @@ void draw_character(const CharacterDrawObj& obj)
 
 void draw_tile(const TileDrawObj& obj)
 {
+    if (web::popup_capturing()) {
+        return;
+    }
+
     P px_pos = map_to_px_coords(obj.panel, obj.pos);
 
     P map_cell_px_dims(config::map_cell_px_w(), config::map_cell_px_h());
@@ -755,6 +764,11 @@ void cover_area(
     const R& area,
     const Color& color)
 {
+    if (web::popup_capturing()) {
+        web::popup_cover(panel, area);
+        return;
+    }
+
     const auto panel_p0 = panels::p0(panel);
 
     const auto screen_area = area.with_offset(panel_p0);
@@ -784,6 +798,10 @@ void cover_cell(const Panel panel, const P& offset)
 
 void draw_logo(Color color)
 {
+    if (web::popup_capturing()) {
+        return;
+    }
+
     // Set pixel position *before* applying rendering offset and scaling
     const int screen_px_w = panel_px_w(Panel::screen);
 

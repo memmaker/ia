@@ -16,6 +16,7 @@
 #include "io_internal.hpp"
 #include "pos.hpp"
 #include "rect.hpp"
+#include "web.hpp"
 
 // -----------------------------------------------------------------------------
 // Private
@@ -28,6 +29,10 @@ namespace io
 {
 void draw_rectangle(R px_rect, const Color& color)
 {
+    if (web::popup_capturing()) {
+        return;
+    }
+
     // NOTE: To handle graphics scaling, we draw extra inner rectangles -
     // this is somewhat hacky, but it fulfills the purpose...
     int nr_rects = 1;
@@ -68,6 +73,10 @@ void draw_rectangle_filled(
     const Color& color,
     const uint8_t alpha)
 {
+    if (web::popup_capturing()) {
+        return;
+    }
+
     px_rect = px_rect.scaled_up(config::video_scale_factor());
 
     px_rect = px_rect.with_offset(g_rendering_px_offset);
@@ -95,6 +104,10 @@ void draw_rectangle_filled_mod_blending(
     const Color& color,
     uint8_t alpha)
 {
+    if (web::popup_capturing()) {
+        return;
+    }
+
     SDL_SetRenderDrawBlendMode(io::g_sdl_renderer, SDL_BLENDMODE_MOD);
 
     draw_rectangle_filled(px_rect, color, alpha);

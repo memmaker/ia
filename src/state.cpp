@@ -5,6 +5,7 @@
 // =============================================================================
 
 #include "state.hpp"
+#include "web.hpp"
 
 #include <algorithm>
 #include <iterator>
@@ -168,6 +169,26 @@ void draw()
         }
     }
 
+#ifdef __EMSCRIPTEN__
+    // Web: in a game the map stays on the canvas; text states over it
+    // (menus, pop-ups, inventory, character sheet...) become an HTML pop-up.
+    web::popup_clear();
+
+    auto game_it = std::end(s_current_states);
+
+    for (auto it = std::begin(s_current_states); it != std::end(s_current_states); ++it) {
+        if ((*it)->id() == StateId::game) {
+            game_it = it;
+        }
+    }
+
+    if (game_it != std::end(s_current_states) &&
+        (*game_it)->has_started() &&
+        !(*game_it)->is_drawing_disabled()) {
+        draw_from = game_it;
+    }
+#endif  // __EMSCRIPTEN__
+
     // Draw every state from this state onward.
     for (; draw_from != std::end(s_current_states); ++draw_from) {
         const auto& state_ptr = *draw_from;
@@ -179,7 +200,37 @@ void draw()
 
         if (state_ptr->has_started() &&
             !state_ptr->is_drawing_disabled()) {
+#ifdef __EMSCRIPTEN__
+            const StateId id = state_ptr->id();
+
+            // Screens that are text also outside a game (death summary,
+            // high scores, manual, options from the main menu).
+            const bool is_text_screen =
+                (id == StateId::game_over_summary) ||
+                (id == StateId::highscore) ||
+                (id == StateId::browse_highscore_entry) ||
+                (id == StateId::manual) ||
+                (id == StateId::manual_page) ||
+                (id == StateId::options) ||
+                (id == StateId::options_submenu);
+
+            const bool is_text =
+                is_text_screen ||
+                ((game_it != std::end(s_current_states)) &&
+                 (id != StateId::game) &&
+                 (id != StateId::marker) &&
+                 (id != StateId::view_minimap));
+
+            if (is_text) {
+                web::popup_begin();
+            }
+
             state_ptr->draw();
+
+            web::popup_end();
+#else
+            state_ptr->draw();
+#endif  // __EMSCRIPTEN__
         }
     }
 }
