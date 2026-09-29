@@ -22,6 +22,7 @@ enum class GameCmd
     explore,
     stairs_down,
     stairs_up,
+    cmd_menu,
 
     right,
     down,

@@ -98,6 +98,15 @@ public:
     }
 
 private:
+    // RVIP: item menu, drop/examine keys, numpad
+    bool rvip_handle_key(const io::InputData& input);
+    item::Item* item_at(int browser_idx) const;
+    int idx_for_letter(char c) const;
+    void rvip_item_menu(int browser_idx);
+    void rvip_drop(int browser_idx);
+    void rvip_throw(int browser_idx);
+    void rvip_examine(int browser_idx) const;
+
     void on_selected() const;
     void on_inventory_slot_selected(InvSlot& slot) const;
     void on_inventory_slot_with_item_selected(InvSlot& slot) const;
@@ -132,6 +141,8 @@ public:
 
 private:
     void on_selected() const;
+
+    bool m_auto_select {false};  // RVIP: item preselected from the inventory
 };
 
 class Equip : public InvState
@@ -165,6 +176,8 @@ private:
     void reserve_keys();
 
     std::vector<FilteredInvEntry> m_filtered_inv {};
+
+    bool m_auto_select {false};  // RVIP: item preselected from the inventory
 };
 
 class SelectIdentify : public InvState
@@ -181,5 +194,11 @@ private:
     const std::vector<ItemType> m_item_types_allowed;
     std::vector<FilteredInvEntry> m_filtered_inv {};
 };
+
+namespace inv_rvip
+{
+// True once after an action chosen in the inventory: reopen it.
+bool take_reopen();
+}  // namespace inv_rvip
 
 #endif  // INVENTORY_HANDLING_HPP

@@ -19,6 +19,7 @@
 #include "audio.hpp"
 #include "audio_data.hpp"
 #include "browser.hpp"
+#include "cmd_menu.hpp"
 #include "colors.hpp"
 #include "common_text.hpp"
 #include "config.hpp"
@@ -31,6 +32,7 @@
 #include "item.hpp"
 #include "item_curse.hpp"
 #include "item_data.hpp"
+#include "popup.hpp"
 #include "map.hpp"
 #include "marker.hpp"
 #include "msg_log.hpp"
@@ -48,6 +50,30 @@
 // Private
 // -----------------------------------------------------------------------------
 static const int s_nr_turns_to_handle_armor = 7;
+
+// RVIP: item chosen in the inventory for Drop/SelectThrow, and reopen flag
+static item::Item* s_rvip_preselect = nullptr;
+static bool s_rvip_reopen = false;
+
+// RVIP: browser index of the preselected item (-1 if none), clears it
+static int take_preselect_idx(const std::vector<item::Item*>& items_in_order)
+{
+    item::Item* const pre = s_rvip_preselect;
+
+    s_rvip_preselect = nullptr;
+
+    if (!pre) {
+        return -1;
+    }
+
+    for (size_t i = 0; i < items_in_order.size(); ++i) {
+        if (items_in_order[i] == pre) {
+            return (int)i;
+        }
+    }
+
+    return -1;
+}
 
 // Number of description lines to scroll past the item description (up or down),
 // when the item description must be scrolled due to lack of window space.
@@ -907,6 +933,10 @@ void BrowseInv::update()
 {
     const io::InputData input = io::read_input();
 
+    if (m_allow_inv_action && rvip_handle_key(input)) {
+        return;
+    }
+
     if ((input.key == 'i') && m_browser.is_on_top_page()) {
         // Exit screen
 
@@ -915,7 +945,12 @@ void BrowseInv::update()
         return;
     }
 
-    const MenuAction action = m_browser.read(input, MenuInputMode::scrolling_and_letters);
+    // RVIP: a letter runs the item's main action at once
+    const MenuAction action =
+        m_browser.read(
+            input,
+            MenuInputMode::scrolling_and_letters,
+            m_allow_inv_action ? ForceAutoSelect::yes : ForceAutoSelect::no);
 
     switch (action) {
     case MenuAction::selected: {
@@ -970,6 +1005,8 @@ void BrowseInv::on_inventory_slot_selected(InvSlot& slot) const
 
 void BrowseInv::on_inventory_slot_with_item_selected(InvSlot& slot) const
 {
+    s_rvip_reopen = true;
+
     states::pop();
 
     msg_log::clear();
@@ -1001,6 +1038,8 @@ void BrowseInv::on_inventory_slot_with_item_selected(InvSlot& slot) const
 
 void BrowseInv::on_backpack_item_selected(const size_t backpack_idx) const
 {
+    s_rvip_reopen = true;
+
     // Exit screen
     states::pop();
 
@@ -1213,6 +1252,24 @@ void Drop::on_start()
     // consistency.
     m_browser.remove_key('i');
 
+    {
+        const Inventory& inv = map::g_player->m_inv;
+        std::vector<item::Item*> order;
+
+        for (const InvSlot& slot : inv.m_slots) {
+            order.push_back(slot.item);
+        }
+
+        order.insert(order.end(), inv.m_backpack.begin(), inv.m_backpack.end());
+
+        const int pre = take_preselect_idx(order);
+
+        if (pre >= 0) {
+            m_browser.set_y(pre);
+            m_auto_select = true;
+        }
+    }
+
     audio::play(audio::SfxId::backpack);
 }
 
@@ -1289,10 +1346,16 @@ void Drop::draw()
 
 void Drop::update()
 {
-    const io::InputData input = io::read_input();
+    const bool auto_select = m_auto_select;
+
+    m_auto_select = false;
+
+    const io::InputData input = auto_select ? io::InputData {} : io::read_input();
 
     const MenuAction action =
-        m_browser.read(input, MenuInputMode::scrolling_and_letters);
+        auto_select
+        ? MenuAction::selected
+        : m_browser.read(input, MenuInputMode::scrolling_and_letters);
 
     switch (action) {
     case MenuAction::selected: {
@@ -1675,6 +1738,24 @@ void SelectThrow::on_start()
 
     reserve_keys();
 
+    {
+        std::vector<item::Item*> order;
+
+        for (const FilteredInvEntry& e : m_filtered_inv) {
+            order.push_back(
+                e.is_slot
+                    ? inventory.m_slots[e.relative_idx].item
+                    : inventory.m_backpack[e.relative_idx]);
+        }
+
+        const int pre = take_preselect_idx(order);
+
+        if (pre >= 0) {
+            m_browser.set_y(pre);
+            m_auto_select = true;
+        }
+    }
+
     audio::play(audio::SfxId::backpack);
 }
 
@@ -1752,9 +1833,16 @@ void SelectThrow::draw()
 
 void SelectThrow::update()
 {
-    const io::InputData input = io::read_input();
+    const bool auto_select = m_auto_select;
 
-    const MenuAction action = m_browser.read(input, MenuInputMode::scrolling_and_letters);
+    m_auto_select = false;
+
+    const io::InputData input = auto_select ? io::InputData {} : io::read_input();
+
+    const MenuAction action =
+        auto_select
+        ? MenuAction::selected
+        : m_browser.read(input, MenuInputMode::scrolling_and_letters);
 
     const FilteredInvEntry& inv_entry_marked = m_filtered_inv[m_browser.y()];
 
@@ -2058,3 +2146,234 @@ void SelectIdentify::update()
 
     }  // action switch
 }
+
+// -----------------------------------------------------------------------------
+// RVIP: inventory item menus
+// -----------------------------------------------------------------------------
+item::Item* BrowseInv::item_at(const int browser_idx) const
+{
+    const Inventory& inv = map::g_player->m_inv;
+
+    if (browser_idx < 0) {
+        return nullptr;
+    }
+
+    if (browser_idx < (int)SlotId::END) {
+        return inv.m_slots[browser_idx].item;
+    }
+
+    const size_t bp_idx = browser_idx - (int)SlotId::END;
+
+    return (bp_idx < inv.m_backpack.size()) ? inv.m_backpack[bp_idx] : nullptr;
+}
+
+int BrowseInv::idx_for_letter(const char c) const
+{
+    const std::vector<char>& keys = m_browser.menu_keys();
+
+    const auto it = std::find(std::cbegin(keys), std::cend(keys), c);
+
+    if (it == std::cend(keys)) {
+        return -1;
+    }
+
+    const int rel = (int)std::distance(std::cbegin(keys), it);
+
+    if (rel >= m_browser.nr_items_shown()) {
+        return -1;
+    }
+
+    return m_browser.top_idx_shown() + rel;
+}
+
+void BrowseInv::rvip_drop(const int browser_idx)
+{
+    s_rvip_preselect = item_at(browser_idx);
+    s_rvip_reopen = true;
+
+    // NOTE: This object is deleted by pop()
+    states::pop();
+    states::push(std::make_unique<Drop>());
+}
+
+void BrowseInv::rvip_throw(const int browser_idx)
+{
+    s_rvip_preselect = item_at(browser_idx);
+    s_rvip_reopen = true;
+
+    states::pop();
+    states::push(std::make_unique<SelectThrow>());
+}
+
+void BrowseInv::rvip_examine(const int browser_idx) const
+{
+    const item::Item* const item = item_at(browser_idx);
+
+    if (!item) {
+        return;
+    }
+
+    std::string msg;
+
+    for (const std::string& paragraph : item->descr()) {
+        if (!msg.empty()) {
+            msg += " ";
+        }
+
+        msg += paragraph;
+    }
+
+    popup::Popup(popup::AddToMsgHistory::no)
+        .set_title(item->name(ItemNameType::plain, ItemNameInfo::yes, ItemNameAttackInfo::none))
+        .set_msg(msg)
+        .run();
+}
+
+void BrowseInv::rvip_item_menu(const int browser_idx)
+{
+    const item::Item* const item = item_at(browser_idx);
+
+    if (!item) {
+        // Empty slot: equip something (the game's own action)
+        on_selected();
+
+        return;
+    }
+
+    enum
+    {
+        act_main,
+        act_throw,
+        act_drop,
+        act_examine
+    };
+
+    const item::ItemData& d = item->data();
+
+    const bool is_slot = browser_idx < (int)SlotId::END;
+
+    const bool is_equipable =
+        (d.type == ItemType::melee_wpn) ||
+        (d.type == ItemType::ranged_wpn) ||
+        (d.type == ItemType::armor) ||
+        (d.type == ItemType::head_wear);
+
+    std::vector<cmd_menu::Entry> entries;
+
+    if (is_slot) {
+        entries.push_back({"e", "Take off / unwield", 'e', act_main});
+    }
+    else if (is_equipable) {
+        entries.push_back({"e", "Wield / wear", 'e', act_main});
+    }
+    else {
+        entries.push_back({"a", d.has_std_activate ? "Apply" : "Use", 'a', act_main});
+    }
+
+    if (d.ranged.is_throwable_wpn) {
+        entries.push_back({"t", "Throw", 't', act_throw});
+    }
+
+    entries.push_back({"d", "Drop", 'd', act_drop});
+    entries.push_back({"v", "Examine", 'v', act_examine});
+
+    const std::string title =
+        item->name(ItemNameType::plain, ItemNameInfo::none, ItemNameAttackInfo::none);
+
+    const int choice = cmd_menu::run(title, entries);
+
+    switch (choice) {
+    case act_main:
+        on_selected();
+        break;
+
+    case act_throw:
+        rvip_throw(browser_idx);
+        break;
+
+    case act_drop:
+        rvip_drop(browser_idx);
+        break;
+
+    case act_examine:
+        rvip_examine(browser_idx);
+        break;
+
+    default:
+        break;
+    }
+}
+
+bool BrowseInv::rvip_handle_key(const io::InputData& input)
+{
+    const int y = m_browser.y();
+
+    switch (input.key) {
+    case SDLK_RETURN:
+    case SDLK_SPACE:
+    case SDLK_KP_5:
+        rvip_item_menu(y);
+        return true;
+
+    case SDLK_KP_PLUS:
+        on_selected();
+        return true;
+
+    case SDLK_KP_MINUS:
+        if (item_at(y)) {
+            rvip_drop(y);
+        }
+        return true;
+
+    case SDLK_KP_MULTIPLY:
+        rvip_examine(y);
+        return true;
+
+    case SDLK_KP_0:
+    case SDLK_KP_PERIOD:
+    case '.':
+        states::pop();
+        return true;
+
+    default:
+        break;
+    }
+
+    // Shift+letter drops, Ctrl+letter examines
+    if ((input.key >= 'A') && (input.key <= 'Z')) {
+        const int idx = idx_for_letter((char)(input.key - 'A' + 'a'));
+
+        if ((idx >= 0) && item_at(idx)) {
+            rvip_drop(idx);
+
+            return true;
+        }
+    }
+
+    if (input.is_ctrl_held && (input.key >= 'a') && (input.key <= 'z')) {
+        const int idx = idx_for_letter((char)input.key);
+
+        if (idx >= 0) {
+            m_browser.set_y(idx);
+
+            rvip_examine(idx);
+        }
+
+        return true;
+    }
+
+    return false;
+}
+
+namespace inv_rvip
+{
+bool take_reopen()
+{
+    const bool r = s_rvip_reopen;
+
+    s_rvip_reopen = false;
+
+    return r;
+}
+
+}  // namespace inv_rvip

@@ -39,6 +39,7 @@
 #include "disarm.hpp"
 #include "game.hpp"
 #include "game_summary_data.hpp"
+#include "cmd_menu.hpp"
 #include "explore.hpp"
 #include "game_time.hpp"
 #include "gfx.hpp"
@@ -559,6 +560,9 @@ static GameCmd to_cmd_default(const io::InputData& input)
     case 'X':
         return GameCmd::explore;
 
+    case SDLK_RETURN:
+        return GameCmd::cmd_menu;
+
     case '>':
         return GameCmd::stairs_down;
 
@@ -844,6 +848,10 @@ void handle(const GameCmd cmd)
 
     case GameCmd::stairs_down: {
         explore::cmd_descend();
+    } break;
+
+    case GameCmd::cmd_menu: {
+        cmd_menu::run_command_menu();
     } break;
 
     case GameCmd::stairs_up: {

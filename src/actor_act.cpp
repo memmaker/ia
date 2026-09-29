@@ -26,6 +26,7 @@
 #include "direction.hpp"
 #include "drop.hpp"
 #include "explore.hpp"
+#include "inventory_handling.hpp"
 #include "game_commands.hpp"
 #include "game_time.hpp"
 #include "global.hpp"
@@ -329,6 +330,13 @@ static void player_act()
     }
     else {
         // Not bot playing
+
+        // RVIP: reopen the inventory after an item action, unless a foe is seen
+        if (inv_rvip::take_reopen() && actor::seen_foes(player).empty()) {
+            game_commands::handle(GameCmd::inventory);
+
+            return;
+        }
 
         // Clear all previous input to avoid queueing up commands.
         io::clear_input();

@@ -224,6 +224,7 @@ set(COMMON_SRC
     src/draw_health_bars.cpp
     src/draw_map.cpp
     src/drop.cpp
+    src/cmd_menu.cpp
     src/explore.cpp
     src/explosion.cpp
     src/flood.cpp

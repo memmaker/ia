@@ -41,6 +41,7 @@ static bool s_is_up_right_held = false;
 static bool s_is_up_left_held = false;
 static bool s_is_down_right_held = false;
 static bool s_is_down_left_held = false;
+static bool s_rvip_skip_text = false;
 
 static void update_input_mod_key_status()
 {
@@ -282,6 +283,15 @@ static void handle_keydown_event()
         s_is_done_reading_input = true;
     } break;
 
+    // RVIP: numpad item keys; their text input ('+', '-') must not resize
+    case SDLK_KP_PLUS:
+    case SDLK_KP_MINUS:
+    case SDLK_KP_MULTIPLY:
+    case SDLK_KP_PERIOD: {
+        s_rvip_skip_text = true;
+        s_is_done_reading_input = true;
+    } break;
+
     case SDLK_KP_5:
     case SDLK_KP_0:
     case SDLK_SPACE:
@@ -312,6 +322,17 @@ static void handle_keydown_event()
     } break;
 
     default: {
+        // RVIP: Ctrl+letter (no text input event). Modifier from the
+        // event itself (the polled mod state may already be newer).
+        if (s_sdl_event.key.keysym.mod & KMOD_CTRL) {
+            s_input.is_ctrl_held = true;
+        }
+
+        if (s_input.is_ctrl_held &&
+            (s_input.key >= 'a') &&
+            (s_input.key <= 'z')) {
+            s_is_done_reading_input = true;
+        }
     } break;
     }
 }
@@ -366,6 +387,12 @@ static void handle_keyup_event()
 static void handle_textinput_event()
 {
     const auto c = s_sdl_event.text.text[0];
+
+    if (s_rvip_skip_text) {
+        s_rvip_skip_text = false;
+
+        return;
+    }
 
     if (c == '+' || c == '-') {
         if (config::is_fullscreen() || io::is_window_maximized()) {
