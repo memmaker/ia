@@ -25,4 +25,3 @@ python3 web/make-help.py "$DIST/help.html"
 rm -rf "$DIST/gfx" && mkdir -p "$DIST/gfx/tiles" && cp -R installed_files/gfx/tiles/20x20 "$DIST/gfx/tiles/"
 # text fonts: the index page's fonts/ (served at ../fonts/ next to the games)
 IDX=$ROOT/../roguelikes-index
-if [ -d "$IDX/fonts" ]; then (cd "$IDX/fonts" && ls *.woff | sed 's/\.woff$//') | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read().split()))' > "$DIST/fonts.json"; else echo "[]" > "$DIST/fonts.json"; fi

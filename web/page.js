@@ -174,8 +174,8 @@
 	}
 	$('chk-sound').onchange = function () { L.sound = this.checked; saveLayout(); applyAudio(); this.blur(); };
 	$('chk-music').onchange = function () { L.music = this.checked; saveLayout(); applyAudio(); this.blur(); };
-	fetch('fonts.json').then(r => r.json()).then(list => {
-		for (const n of list) { const o = document.createElement('option'); o.value = n; o.textContent = n.replace(/^Web(Plus|437)_/, '').replace(/_/g, ' '); $('sel-font').appendChild(o); }
+	RvipWM.fonts.then(list => {
+		RvipWM.fontOptions($('sel-font'));
 		$('sel-font').value = face;
 	}).catch(() => { });
 	$('sel-font').onchange = function () { face = L.face = this.value; loadFace(face); saveLayout(); this.blur(); };
