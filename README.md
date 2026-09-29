@@ -1,3 +1,11 @@
+# Infra Arcana for the web (memmaker/ia)
+
+This is [Infra Arcana](https://gitlab.com/martin-tornqvist/ia) v23.0.0 by Martin Törnqvist, upstream commit [a084376](https://gitlab.com/martin-tornqvist/ia/-/tree/a084376) (branch main), ported to the browser (Emscripten) with auto-explore, stair walking, a command menu, item menus and movable windows. Play it at https://ruzzoli.de/roguelikes/ia/.
+
+All our changes: https://github.com/memmaker/ia/compare/a084376...main
+
+---
+
 # Guide for building Infra Arcana
 
 ## Fetching the source code

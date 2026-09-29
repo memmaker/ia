@@ -78,9 +78,9 @@ parts.append(section('web', 'Playing in the browser', WEB))
 
 # RVIP: About this version
 parts.append('<h2 id="h-version">About this version</h2><ul>'
-             '<li>Based on <strong>Infra Arcana 23.0.0</strong> by Martin Törnqvist (gitlab.com/martin-tornqvist/ia), AGPL-3.0-or-later; tiles by Oryx; sound effects from freesound.org under their own licences (see the game\'s LICENSE-AUDIO.txt); built with Emscripten.</li>'
+             '<li>Based on <strong>Infra Arcana 23.0.0</strong> by Martin Törnqvist, upstream commit <a href="https://gitlab.com/martin-tornqvist/ia/-/tree/a084376">martin-tornqvist/ia @ a084376</a>, AGPL-3.0-or-later; tiles by Oryx; sound effects from freesound.org under their own licences (see the game\'s LICENSE-AUDIO.txt); built with Emscripten.</li>'
              '<li>Our changes (auto-explore, stairs walking, command menu, inventory cursor and item menus, web build) '
-             'are on GitHub: <a href="https://github.com/memmaker/ia">memmaker/ia</a>.</li></ul>')
+             'are on GitHub: <a href="https://github.com/memmaker/ia">memmaker/ia</a> (<a href="https://github.com/memmaker/ia/compare/a084376...main">all changes</a>).</li></ul>')
 out = sys.argv[1] if len(sys.argv) > 1 else None
 text = '\n'.join(parts)
 if out:
