@@ -18,6 +18,11 @@ enum class GameCmd
 
     none,
 
+    // RVIP
+    explore,
+    stairs_down,
+    stairs_up,
+
     right,
     down,
     left,

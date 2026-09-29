@@ -25,6 +25,7 @@
 #include "debug.hpp"
 #include "direction.hpp"
 #include "drop.hpp"
+#include "explore.hpp"
 #include "game_commands.hpp"
 #include "game_time.hpp"
 #include "global.hpp"
@@ -303,6 +304,23 @@ static void player_act()
         }
 
         return;
+    }
+
+    // RVIP: auto-explore / stair walk step
+    if (explore::is_active()) {
+        const Dir explore_dir = explore::next_dir();
+
+        if (explore_dir != Dir::END) {
+            const P pos_before = player.m_pos;
+
+            do_move_action(player, explore_dir);
+
+            actor::update_player_fov();
+
+            explore::after_step(pos_before);
+
+            return;
+        }
     }
 
     // If this point is reached - read input

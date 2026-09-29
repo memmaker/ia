@@ -39,6 +39,7 @@
 #include "disarm.hpp"
 #include "game.hpp"
 #include "game_summary_data.hpp"
+#include "explore.hpp"
 #include "game_time.hpp"
 #include "gfx.hpp"
 #include "global.hpp"
@@ -555,6 +556,15 @@ static GameCmd to_cmd_default(const io::InputData& input)
     case 'x':
         return GameCmd::cast_spell;
 
+    case 'X':
+        return GameCmd::explore;
+
+    case '>':
+        return GameCmd::stairs_down;
+
+    case '<':
+        return GameCmd::stairs_up;
+
     case 'C':
     case '@':
         return GameCmd::char_descr;
@@ -826,6 +836,18 @@ void handle(const GameCmd cmd)
             MsgInterruptPlayer::no,
             MorePromptOnMsg::no,
             CopyToMsgHistory::no);
+    } break;
+
+    case GameCmd::explore: {
+        explore::cmd_explore();
+    } break;
+
+    case GameCmd::stairs_down: {
+        explore::cmd_descend();
+    } break;
+
+    case GameCmd::stairs_up: {
+        explore::cmd_ascend();
     } break;
 
     case GameCmd::none:

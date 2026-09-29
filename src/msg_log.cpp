@@ -22,6 +22,7 @@
 #include "pos.hpp"
 #include "property_data.hpp"
 #include "property_handler.hpp"
+#include "explore.hpp"
 #include "query.hpp"
 #include "saving.hpp"
 #include "text_format.hpp"
@@ -48,6 +49,9 @@ static const int s_repeat_str_len = 4;
 static const int s_space_reserved_for_more_prompt = (int)msg_log::g_more_str.size() + 1;
 
 static bool s_is_waiting_more_pompt = false;
+
+// RVIP: auto_more, no --More-- stops (messages stay in the history, Ctrl-P).
+static const bool s_auto_more = true;
 
 // When the message log is cleared, the current messages fade out. New messages will interrupt the
 // fading and remove the messages immediately. This tracks the state of the fade mechanism.
@@ -474,6 +478,8 @@ void add(
         return;
     }
 
+    explore::on_msg();
+
     if (s_msg_fade_state == MsgFadeState::is_fading) {
         // A fade out of old messages is ongoing while a new message was added. Force
         // immediate clearing of the log before adding new messages.
@@ -605,7 +611,7 @@ void add(
                 copy_to_history);
     }
 
-    if (add_more_prompt_on_msg == MorePromptOnMsg::yes) {
+    if ((add_more_prompt_on_msg == MorePromptOnMsg::yes) && !s_auto_more) {
         more_prompt();
     }
 
@@ -621,6 +627,17 @@ void add(
 
 void more_prompt()
 {
+    // RVIP: no --More-- stops (auto_more); the log stays in the history.
+    if (s_lines[0].messages.empty()) {
+        return;
+    }
+
+    if (s_auto_more) {
+        s_msg_fade_state = MsgFadeState::done;
+        clear();
+        return;
+    }
+
     if (!s_lines[0].messages.empty()) {
         map::g_player->interrupt_auto_repeated_commands();
 

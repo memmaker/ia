@@ -933,6 +933,9 @@ public:
 
     void bump(actor::Actor& actor_bumping) override;
 
+    // RVIP: step onto the stairs and descend (the popup's "Descend")
+    void descend();
+
     void on_new_turn_hook() override;
 
     void add_light_hook(Array2<bool>& light) const override;

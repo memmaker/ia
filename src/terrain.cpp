@@ -1737,6 +1737,30 @@ void Stairs::on_new_turn_hook()
     ASSERT(!map::g_items.at(m_pos));
 }
 
+void Stairs::descend()
+{
+    map::g_player->m_pos = m_pos;
+
+    if (is_fake()) {
+        // NOTE: This destroys this object
+        player_use_fake_stairs();
+
+        return;
+    }
+
+    msg_log::clear();
+
+    msg_log::add("I descend the stairs.");
+
+    // Always auto-save the game when descending
+    //
+    // NOTE: We descend one dlvl when loading the game, so
+    // auto-saving should be done BEFORE descending here
+    saving::save_game();
+
+    map_travel::go_to_nxt();
+}
+
 void Stairs::bump(actor::Actor& actor_bumping)
 {
     if (!actor::is_player(&actor_bumping)) {
@@ -1758,26 +1782,7 @@ void Stairs::bump(actor::Actor& actor_bumping)
 
     switch (choice) {
     case 0:
-        map::g_player->m_pos = m_pos;
-
-        if (is_fake()) {
-            // NOTE: This destroys this object
-            player_use_fake_stairs();
-
-            return;
-        }
-
-        msg_log::clear();
-
-        msg_log::add("I descend the stairs.");
-
-        // Always auto-save the game when descending
-        //
-        // NOTE: We descend one dlvl when loading the game, so
-        // auto-saving should be done BEFORE descending here
-        saving::save_game();
-
-        map_travel::go_to_nxt();
+        descend();
         break;
 
     case 1:

@@ -19,6 +19,7 @@
 #include "actor_data.hpp"
 #include "actor_death.hpp"
 #include "actor_player_state.hpp"
+#include "explore.hpp"
 #include "actor_see.hpp"
 #include "array2.hpp"
 #include "attack.hpp"
@@ -923,6 +924,7 @@ void Actor::interrupt_all_actions(const ForceInterruptActions is_forced)
 
     player_state::g_wait_turns_left = -1;
     player_state::g_auto_move_dir = Dir::END;
+    explore::stop();
 }
 
 item::Wpn* Actor::make_kick_wpn(const Actor& mon_kicked) const
