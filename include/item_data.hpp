@@ -1,0 +1,450 @@
+// =============================================================================
+// Copyright Martin Törnqvist <m.tornq@gmail.com>
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// =============================================================================
+
+#ifndef ITEM_DATA_HPP
+#define ITEM_DATA_HPP
+
+#include <algorithm>
+#include <cstddef>
+#include <string>
+#include <utility>
+#include <vector>
+
+#include "ability_values.hpp"
+#include "audio_data.hpp"
+#include "colors.hpp"
+#include "gfx.hpp"
+#include "global.hpp"
+#include "item_att_property.hpp"
+#include "random.hpp"
+#include "room.hpp"
+#include "spells.hpp"
+#include "terrain_data.hpp"
+#include "wpn_dmg.hpp"
+
+enum class SndVol;
+
+namespace item
+{
+enum class Id
+{
+    trapezohedron,
+
+    // Basic melee weapons and thrown weapons
+    axe,
+    club,
+    dagger,
+    hammer,
+    hatchet,
+    machete,
+    pitchfork,
+    sledgehammer,
+    spear,
+    spiked_mace,
+
+    // Throwing weapons
+    iron_spike,
+    rock,
+    thr_knife,
+
+    // Ranged weapons, ammo
+    drum_of_bullets,
+    electric_gun,
+    tommy_gun,
+    morphic_blaster,
+    pistol,
+    pistol_mag,
+    pump_shotgun,
+    revolver,
+    revolver_bullet,
+    rifle,
+    rifle_bullet,
+    sawed_off,
+    shotgun_shell,
+    spike_gun,
+
+    // Trap weapons
+    trap_dart,
+    trap_dart_poison,
+    trap_spear,
+    trap_spear_poison,
+
+    // Explosives
+    dynamite,
+    flare,
+    molotov,
+    smoke_grenade,
+
+    // Player attacks
+    player_ghoul_claw,
+    player_kick,
+    player_punch,
+    player_stomp,
+
+    // Intrinsic attacks for monsters
+    //
+    // NOTE: There is a string -> id map for these entries, see
+    // item_data.cpp.
+    //
+    intr_bite,
+    intr_claw,
+    intr_dust_engulf,
+    intr_earth_breath,
+    intr_energy_engulf,
+    intr_fire_breath,
+    intr_fire_engulf,
+    intr_ghost_touch,
+    intr_headbutt,
+    intr_kick,
+    intr_lightning_breath,
+    intr_maul,
+    intr_mind_leech_sting,
+    intr_net_throw,
+    intr_punch,
+    intr_punch_knockback,
+    intr_pus_spew,
+    intr_putrid_spit,
+    intr_raven_peck,
+    intr_snake_venom_spit,
+    intr_spear_thrust,
+    intr_spores,
+    intr_sting,
+    intr_strange_color_touch,
+    intr_strangle,
+    intr_strike,
+    intr_vampiric_bite,
+    intr_water_breath,
+    intr_web_bola,
+
+    // Armor
+    armor_asb_suit,
+    armor_flak_jacket,
+    armor_heavy_coat,
+    armor_iron_suit,
+    armor_leather_jacket,
+    armor_mi_go,
+
+    // Head items
+    gas_mask,
+    torture_collar,
+
+    // Scrolls
+    scroll_aura_of_decay,
+    scroll_aza_gaze,
+    scroll_bless,
+    scroll_blood_temper,
+    scroll_cancellation,
+    scroll_cataclysm,
+    scroll_clairvoyance,
+    scroll_control_object,
+    scroll_crimson_passage,
+    scroll_curse,
+    scroll_darkbolt,
+    scroll_enfeeble,
+    scroll_erudition,
+    scroll_expulsion,
+    scroll_gnawing_torrent,
+    scroll_haste,
+    scroll_heal,
+    scroll_identify,
+    scroll_inscribe_boundary_sigil,
+    scroll_invis,
+    scroll_light,
+    scroll_mirror_images,
+    scroll_pestilence,
+    scroll_poison,
+    scroll_premonition,
+    scroll_sacrifice_life,
+    scroll_see_invis,
+    scroll_slow,
+    scroll_projected_strike,
+    scroll_spell_shield,
+    scroll_teleport,
+    scroll_temporal_echo,
+    scroll_terrify,
+    scroll_thorns,
+    scroll_threat_projection,
+    scroll_transmut,
+
+    // Potions
+    // Benign
+    potion_skill,
+    potion_carapace,
+    potion_blinking,
+    potion_burrowing,
+    potion_curing,
+    potion_vitality,
+    potion_spirit,
+    potion_fortitude,
+    potion_resistance,
+    potion_insight,
+    potion_descent,
+    // Malign
+    potion_blindness,
+    potion_conf,
+    potion_paralyze,
+    potion_poison,
+
+    // Strange Devices
+    device_blaster,
+    device_force_field,
+    device_rejuvenator,
+    device_sentry_drone,
+    device_translocator,
+
+    lantern,
+
+    // Rods
+    rod_cloud_minds,
+    rod_deafening,
+    rod_displacement,
+    rod_door_creation,
+    rod_mi_go_hypno,
+    rod_mist,
+    rod_opening,
+    rod_shockwave,
+    rod_unbinding,
+
+    // Misc
+    astral_opium,
+    bone_charm,
+    clockwork,
+    flagellant_whip,
+    fluctuating_material,
+    holy_symbol,
+    horn_of_banishment,
+    horn_of_malice,
+    medical_bag,
+    necronomicon,
+    onyx_drop,
+    orb_of_life,
+    pharaoh_staff,
+    shadow_dagger,
+    talisman_of_arcane_void,
+    talisman_of_resurrection,
+    talisman_of_teleport_control,
+    witch_eye,
+    zombie_dust,
+
+    END
+};
+
+// NOTE: There is a string -> item set id map for these entries, see
+// item_data.cpp.
+enum class ItemSetId
+{
+    minor_treasure,
+    major_treasure,
+    supreme_treasure,
+    firearm,
+    spike_gun,
+    witch_eye,
+    fluctuating_material,
+    zealot_spiked_mace,
+    priest_dagger,
+    electric_gun,
+    morphic_blaster,
+    mi_go_armor,
+    high_priest_guard_war_vet,
+    high_priest_guard_rogue,
+};
+
+enum class Value
+{
+    normal,
+    minor_treasure,
+    major_treasure,
+    supreme_treasure
+};
+
+enum Weight
+{
+    none = 0,
+    extra_light = 1,        // Bullets, shotgun shells, throwing knives, rocks, ...
+    light = 10,             // Magazines/drums, dynamite, daggers, potions, ...
+    moderately_light = 30,  // Pistols
+    medium = 50,            // Some melee weapons and firearms
+    moderately_heavy = 62,  // Some melee weapons and firearms
+    heavy = 75,             // Sledgehammers
+    extra_heavy = 100,      // Iron Suit
+};
+
+struct ItemName
+{
+    ItemName(
+        const std::string& name,
+        const std::string& name_pl,
+        const std::string& name_a)
+    {
+        names[(size_t)ItemNameType::plain] = name;
+        names[(size_t)ItemNameType::plural] = name_pl;
+        names[(size_t)ItemNameType::a] = name_a;
+    }
+
+    ItemName()
+    {
+        for (size_t i = 0; i < (size_t)ItemNameType::END; ++i) {
+            names[i] = "";
+        }
+    }
+
+    std::string names[(size_t)ItemNameType::END];
+};
+
+struct ItemAttackMsgs
+{
+    ItemAttackMsgs() = default;
+
+    ItemAttackMsgs(std::string player_, std::string other_) :
+        player(std::move(player_)),
+        other(std::move(other_)) {}
+
+    std::string player;
+    std::string other;
+};
+
+struct ContainerSpawnRule
+{
+    ContainerSpawnRule(
+        terrain::Id container_terrain_id,
+        int pct_chance_to_incl_terrain) :
+        terrain_id(container_terrain_id),
+        pct_chance_to_incl(pct_chance_to_incl_terrain) {}
+
+    terrain::Id terrain_id = terrain::Id::END;
+    int pct_chance_to_incl = 0;
+};
+
+struct MeleeData
+{
+    MeleeData();
+
+    bool is_melee_wpn;
+    WpnDmg dmg;
+    int hit_chance_mod;
+    bool is_noisy;
+    ItemAttackMsgs attack_msgs;
+    ItemAttackProp prop_applied;
+    DmgType dmg_type;
+    int reach;
+    bool knocks_back;
+    bool can_attack_door_wood;
+    bool can_attack_door_gate;
+    bool can_attack_corpse;
+    audio::SfxId hit_small_sfx;
+    audio::SfxId hit_medium_sfx;
+    audio::SfxId hit_hard_sfx;
+    audio::SfxId miss_sfx;
+};
+
+struct RangedData
+{
+    RangedData();
+
+    bool is_ranged_wpn;
+    bool is_throwable_wpn;
+    bool is_machine_gun;
+    bool is_shotgun;
+    // NOTE: This should be set on ranged weapons AND magazines
+    int max_ammo;
+    // NOTE: "Pure" melee weapons should not set this value - they
+    // do throw damage based on their melee damage instead
+    WpnDmg dmg;
+    int hit_chance_mod;
+    int throw_hit_chance_mod;
+    bool always_break_on_throw;
+    Range effective_range;
+    int max_range;
+    bool knocks_back;
+    Id ammo_item_id;
+    DmgType dmg_type;
+    bool has_infinite_ammo;
+    char projectile_character;
+    gfx::TileId projectile_tile;
+    Color projectile_color;
+    bool projectile_leaves_trail;
+    ItemAttackMsgs attack_msgs;
+    std::string snd_msg;
+    SndVol snd_vol;
+    bool makes_ricochet_snd;
+    audio::SfxId attack_sfx;
+    audio::SfxId reload_sfx;
+    ItemAttackProp prop_applied;
+};
+
+struct ArmorData
+{
+    ArmorData();
+
+    int armor_points;
+    double dmg_to_durability_factor;
+};
+
+struct ItemData
+{
+public:
+    ItemData();
+
+    Id id;
+    ItemType type;
+    bool is_intr;
+    bool has_std_activate;          // E.g. potions and scrolls
+    bool is_prio_in_backpack_list;  // E.g. Medical Bag
+    Value value;
+    bool allow_cursed;
+    int weight;
+    bool is_unique;
+    bool allow_spawn;
+    Range spawn_std_range;
+    int max_stack_at_spawn;
+    int chance_to_incl_in_spawn_list;
+    bool is_stackable;
+    bool is_identified;
+    bool is_alignment_known;     // Used for Potions
+    bool is_spell_domain_known;  // Used for Scrolls
+    bool is_tried;
+    bool is_found;  // Was seen on map or in inventory
+    int xp_on_found;
+    ItemName base_name;
+    ItemName base_name_un_id;
+    std::vector<std::string> base_descr;
+    char character;
+    Color color;
+    gfx::TileId tile;
+    AttackMode main_attack_mode;
+    SpellId spell_cast_from_scroll;
+    std::string land_on_hard_snd_msg;
+    audio::SfxId land_on_hard_sfx;
+
+    std::vector<room::RoomType> native_rooms;
+    std::vector<terrain::Id> native_containers;
+
+    int ability_mods_while_equipped[(size_t)AbilityId::END];
+
+    bool allow_display_dmg;
+
+    MeleeData melee;
+
+    RangedData ranged;
+
+    ArmorData armor;
+};
+
+extern ItemData g_data[(size_t)Id::END];
+
+void init();
+void cleanup();
+
+void save();
+void load();
+
+ItemSetId str_to_item_set_id(const std::string& str);
+
+Id str_to_intr_item_id(const std::string& str);
+
+}  // namespace item
+
+#endif  // ITEM_DATA_HPP

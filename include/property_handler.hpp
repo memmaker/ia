@@ -1,0 +1,263 @@
+// =============================================================================
+// Copyright Martin Törnqvist <m.tornq@gmail.com>
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// =============================================================================
+
+#ifndef PROPERTY_HANDLER_HPP
+#define PROPERTY_HANDLER_HPP
+
+#include <cstddef>
+#include <memory>
+#include <optional>
+#include <string>
+#include <vector>
+
+#include "ability_values.hpp"
+#include "colors.hpp"
+#include "direction.hpp"
+#include "gfx.hpp"
+#include "global.hpp"
+#include "property.hpp"
+#include "property_data.hpp"
+
+namespace io
+{
+enum class GraphicsCycle;
+}  // namespace io
+
+namespace item
+{
+class Item;
+}  // namespace item
+
+namespace actor
+{
+class Actor;
+}  // namespace actor
+
+namespace prop
+{
+enum class PropEndAllowCallEndHook
+{
+    no,
+    yes
+};
+
+enum class PropEndAllowMsg
+{
+    no,
+    yes
+};
+
+enum class PropEndAllowHistoricMsg
+{
+    no,
+    yes
+};
+
+struct PropListEntry
+{
+    ColoredString title;
+    std::string descr;
+    const Prop* prop {nullptr};
+};
+
+struct PropEndConfig
+{
+    PropEndConfig() = default;
+
+    PropEndConfig(
+        PropEndAllowCallEndHook end_hook_allowed,
+        PropEndAllowMsg msg_allowed,
+        PropEndAllowHistoricMsg historic_msg_allowed) :
+        allow_end_hook(end_hook_allowed),
+        allow_msg(msg_allowed),
+        allow_historic_msg(historic_msg_allowed) {}
+
+    PropEndAllowCallEndHook allow_end_hook {PropEndAllowCallEndHook::yes};
+    PropEndAllowMsg allow_msg = {PropEndAllowMsg::yes};
+    PropEndAllowHistoricMsg allow_historic_msg {PropEndAllowHistoricMsg::yes};
+};
+
+// Each actor has an instance of this
+class PropHandler
+{
+public:
+    PropHandler(actor::Actor* owner);
+
+    ~PropHandler() = default;
+
+    PropHandler(const PropHandler&) = delete;
+
+    PropHandler& operator=(const PropHandler&) = delete;
+
+    void save() const;
+
+    void load();
+
+    // All properties must be added through this function (can also be done via the other
+    // "apply" methods, which will then call "apply")
+    void apply(
+        Prop* prop,
+        PropSrc src = PropSrc::intr,
+        bool force_effect = false,
+        Verbose verbose = Verbose::yes);
+
+    void apply_natural_props_from_actor_data();
+
+    // The following two methods are supposed to be called by items
+    void add_prop_from_equipped_item(
+        const item::Item* item,
+        Prop* prop,
+        Verbose verbose);
+
+    void remove_props_for_item(const item::Item* item);
+
+    // Fast methods for checking if a certain property id is applied
+    bool has(Id id) const;
+    bool has_any(const std::vector<Id>& ids) const;
+
+    Prop* prop(Id id) const;
+
+    // NOTE: These only ever ends INTRINSIC properties (never properties from worn items for
+    // example).
+    bool end_prop(Id id, const PropEndConfig& config = {});
+    bool end_temporary_prop(Id id, const PropEndConfig& config = {});
+
+    std::vector<ColoredString> property_names_short() const;
+    std::vector<PropListEntry> property_names_and_descr() const;
+
+    bool is_temporary_prop(const Prop& prop) const;
+    bool is_temporary_negative_prop(const Prop& prop) const;
+    bool has_temporary_negative_prop_mon() const;
+
+    //----------------------------------------------------------------------
+    // Hooks called from various places
+    //----------------------------------------------------------------------
+    void affect_move_dir(Dir& dir) const;
+
+    bool allow_move_dir(Dir dir) const;
+
+    void on_moved_non_center_dir() const;
+
+    int melee_dmg_penalty_pct() const;
+
+    // Affect HP/SP by absolute value or a percentage value.
+    int max_hp_mod() const;
+    int max_hp_pct_mod() const;
+    int max_sp_mod() const;
+    int max_sp_pct_mod() const;
+
+    int player_extra_min_shock() const;
+
+    int armor_points() const;
+
+    bool allow_attack(Verbose verbose) const;
+    bool allow_attack_melee(Verbose verbose) const;
+    bool allow_attack_ranged(Verbose verbose) const;
+    bool allow_see() const;
+    bool allow_move() const;
+    bool allow_act() const;
+    bool allow_speak(Verbose verbose) const;
+    bool allow_eat(Verbose verbose) const;   // Also for drinking
+    bool allow_pray(Verbose verbose) const;  // Pray over the Holy Symbol
+
+    // NOTE: The allow_*_absolute methods below answer if some action could EVER be performed,
+    // and the allow_*_chance methods allows the action with a random chance.
+    //
+    // For example, blindness never allows the player to read scrolls, and the game won't let
+    // the player try. Burning on the other hand will allow the player to try, with a certain
+    // percent chance of success, and the scroll will be wasted on failure.
+    //
+    // (All plain allow_* methods above are also considered "absolute".)
+    //
+    bool allow_read_absolute(Verbose verbose) const;
+    bool allow_read_chance(Verbose verbose) const;
+    bool allow_cast_intr_spell_absolute(Verbose verbose) const;
+    bool allow_cast_intr_spell_chance(Verbose verbose) const;
+
+    void on_hit(int dmg, DmgType dmg_type, actor::Actor* attacker);
+    void on_death();
+    void on_destroyed_alive();
+    void on_destroyed_corpse();
+
+    int ability_mod(AbilityId ability) const;
+
+    void cycle_graphics(io::GraphicsCycle cycle) const;
+
+    // TODO: Ensure all of these are used:
+    std::optional<std::string> override_actor_name_the() const;
+    std::optional<std::string> override_actor_name_a() const;
+    std::optional<gfx::TileId> override_actor_tile() const;
+    std::optional<char> override_actor_character() const;
+    std::optional<std::string> override_actor_descr() const;
+    std::optional<Color> override_actor_color() const;
+
+    void on_placed();
+
+    void on_new_dlvl();
+
+    // Called when the actors turn begins/ends
+    void on_turn_begin();
+    void on_turn_end();
+
+    void on_std_turn();
+
+    // Called just before an actor is supposed to do an action (move, attack,...).
+    //
+    // This may "take over" the actor and do some special behavior instead (e.g. a Zombie
+    // rising, or a Vortex pulling), possibly ticking game time.
+    //
+    // If time is ticked, this method returns 'DidAction::yes' (each property implementing this
+    // callback must make sure to do this).
+    //
+    DidAction on_act();
+
+    void on_melee_attack();
+
+    void on_player_see();
+
+    bool is_resisting_dmg(DmgType dmg_type, Verbose verbose) const;
+
+private:
+    template <typename Pred>
+    bool end_prop_if(Id id, const PropEndConfig& prop_end_config, Pred&& pred);
+
+    void print_resist_msg(const Prop& prop) const;
+    void print_start_msg(const Prop& prop) const;
+
+    void handle_resistance_trait_reducing_duration(Prop& prop) const;
+
+    bool handle_resisting_prop(const Prop& prop, Verbose verbose) const;
+
+    void set_prop_duration_on_more_applied(Prop& prop_to_update, const Prop& other_prop) const;
+
+    void handle_upgrade_of_existing_intr_prop(Prop& new_prop);
+
+    bool handle_apply_more_on_existing_intr_prop(const Prop& new_prop, Verbose verbose) const;
+
+    void handle_status_effects_hint(const Prop& prop) const;
+
+    // A hook that prints messages, updates FOV, etc, and also calls the on_end() property hook.
+    //
+    // NOTE: It does NOT remove the property from the vector or decrement the active property
+    // info. The caller is responsible for this.
+    //
+    void on_prop_end(Prop* prop, const PropEndConfig& end_config);
+
+    void incr_prop_count(Id id);
+    void decr_prop_count(Id id);
+
+    std::vector<std::shared_ptr<Prop>> m_props;
+
+    // This array is only used as an optimization when requesting which properties are currently
+    // active (see the "has()" method above).
+    int m_prop_count_cache[(size_t)Id::END];
+
+    actor::Actor* m_owner;
+};
+
+}  // namespace prop
+
+#endif  // PROPERTY_HANDLER_HPP

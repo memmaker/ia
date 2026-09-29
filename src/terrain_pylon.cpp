@@ -1,0 +1,648 @@
+// =============================================================================
+// Copyright Martin Törnqvist <m.tornq@gmail.com>
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// =============================================================================
+
+#include "terrain_pylon.hpp"
+
+#include <ostream>
+
+#include "actor.hpp"
+#include "actor_see.hpp"
+#include "array2.hpp"
+#include "colors.hpp"
+#include "common_text.hpp"
+#include "debug.hpp"
+#include "direction.hpp"
+#include "game.hpp"
+#include "game_time.hpp"
+#include "gfx.hpp"
+#include "global.hpp"
+#include "knockback.hpp"
+#include "map.hpp"
+#include "misc.hpp"
+#include "msg_log.hpp"
+#include "property.hpp"
+#include "property_data.hpp"
+#include "property_factory.hpp"
+#include "property_handler.hpp"
+#include "query.hpp"
+#include "random.hpp"
+#include "saving.hpp"
+#include "teleport.hpp"
+#include "terrain_factory.hpp"
+#include "text_format.hpp"
+
+// -----------------------------------------------------------------------------
+// Private
+// -----------------------------------------------------------------------------
+struct PylonAppearance
+{
+    void save() const
+    {
+        saving::put_str(name_plain);
+        saving::put_str(name_a);
+        saving::put_int(color.r());
+        saving::put_int(color.g());
+        saving::put_int(color.b());
+        saving::put_int((int)tile);
+    }
+
+    void load()
+    {
+        name_plain = saving::get_str();
+        name_a = saving::get_str();
+
+        const int r = saving::get_int();
+        const int g = saving::get_int();
+        const int b = saving::get_int();
+
+        color.set_rgb(r, g, b);
+
+        tile = (gfx::TileId)saving::get_int();
+    }
+
+    std::string name_plain;
+    std::string name_a;
+    Color color;
+    gfx::TileId tile {};
+};
+
+static const auto s_nr_pylon_types = (size_t)terrain::pylon::PylonId::END;
+static PylonAppearance s_id_to_appearance[s_nr_pylon_types] {};
+static bool s_is_identified[s_nr_pylon_types] {false};
+
+static PylonAppearance get_appearance_for_id(const terrain::pylon::PylonId id)
+{
+    if (id == terrain::pylon::PylonId::END) {
+        ASSERT(false);
+
+        return {};
+    }
+
+    return s_id_to_appearance[(size_t)id];
+}
+
+static bool is_identified(const terrain::pylon::PylonId id)
+{
+    return s_is_identified[(size_t)id];
+}
+
+static std::string get_fake_name(
+    const terrain::pylon::PylonId id,
+    const Article article)
+{
+    const PylonAppearance& appearance = get_appearance_for_id(id);
+
+    if (article == Article::a) {
+        return appearance.name_a;
+    }
+    else {
+        return "the " + appearance.name_plain;
+    }
+}
+
+// -----------------------------------------------------------------------------
+// terrain
+// -----------------------------------------------------------------------------
+namespace terrain
+{
+// -----------------------------------------------------------------------------
+// pylon
+// -----------------------------------------------------------------------------
+namespace pylon
+{
+void init()
+{
+    TRACE_FUNC_BEGIN;
+
+    std::vector<PylonAppearance> appearances {
+        {"Angled Pylon",
+         "an Angled Pylon",
+         colors::light_sepia(),
+         gfx::TileId::pylon_angled},
+        {"Arched Pylon",
+         "an Arched Pylon",
+         colors::light_sepia(),
+         gfx::TileId::pylon_arched},
+        {"Coiled Pylon",
+         "a Coiled Pylon",
+         colors::light_sepia(),
+         gfx::TileId::pylon_coiled},
+        {"A Serrated Pylon",
+         "a Serrated Pylon",
+         colors::light_sepia(),
+         gfx::TileId::pylon_serrated},
+        {"Star-crowned Pylon",
+         "a Star-crowned Pylon",
+         colors::light_sepia(),
+         gfx::TileId::pylon_star_crowned},
+        {"Two-pronged Pylon",
+         "a Two-pronged Pylon",
+         colors::light_sepia(),
+         gfx::TileId::pylon_two_pronged}};
+
+    ASSERT(appearances.size() >= s_nr_pylon_types);
+
+    rnd::shuffle(appearances);
+
+    for (size_t i = 0; i < s_nr_pylon_types; ++i) {
+        s_id_to_appearance[i] = appearances[i];
+
+        s_is_identified[i] = false;
+    }
+
+    TRACE_FUNC_END;
+}
+
+void save()
+{
+    for (size_t i = 0; i < s_nr_pylon_types; ++i) {
+        s_id_to_appearance[i].save();
+
+        saving::put_bool(s_is_identified[i]);
+    }
+}
+
+void load()
+{
+    for (size_t i = 0; i < s_nr_pylon_types; ++i) {
+        s_id_to_appearance[i].load();
+
+        s_is_identified[i] = saving::get_bool();
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Pylon implementation
+// -----------------------------------------------------------------------------
+std::vector<actor::Actor*> PylonImpl::living_actors_reached() const
+{
+    std::vector<actor::Actor*> actors;
+
+    for (actor::Actor* const actor : game_time::g_actors) {
+        // Actor is dead?
+        if (actor->m_state != ActorState::alive) {
+            continue;
+        }
+
+        const P& p = actor->m_pos;
+
+        const int d = 1;
+
+        // Actor is out of range?
+        if (king_dist(m_pos, p) > d) {
+            continue;
+        }
+
+        actors.push_back(actor);
+    }
+
+    return actors;
+}
+
+actor::Actor* PylonImpl::rnd_reached_living_actor() const
+{
+    const std::vector<actor::Actor*> actors = living_actors_reached();
+
+    if (actors.empty()) {
+        return nullptr;
+    }
+
+    actor::Actor* actor = rnd::element(living_actors_reached());
+
+    return actor;
+}
+
+void PylonImpl::reveal() const
+{
+    if (is_identified(id())) {
+        return;
+    }
+
+    s_is_identified[(size_t)id()] = true;
+
+    const std::string fake_name = get_fake_name(id(), Article::a);
+
+    const std::string descr = effect_descr();
+
+    msg_log::add("I now know that " + fake_name + " " + descr + ".");
+
+    game::incr_player_xp(g_xp_on_identify_pylon);
+}
+
+// -----------------------------------------------------------------------------
+// Invisibility Pylon
+// -----------------------------------------------------------------------------
+std::string PylonInvis::name(Article article) const
+{
+    std::string str;
+
+    if (article == Article::a) {
+        str = "a";
+    }
+    else {
+        str = "the";
+    }
+
+    return str + " Cloaking Pylon";
+}
+
+std::string PylonInvis::effect_descr() const
+{
+    return "turns creatures invisible";
+}
+
+void PylonInvis::on_new_turn()
+{
+    const std::vector<actor::Actor*> actors = living_actors_reached();
+
+    for (actor::Actor* actor : actors) {
+        if (actor->m_properties.has(prop::Id::cloaked)) {
+            continue;
+        }
+
+        const bool can_player_see_actor_before = actor::can_player_see_actor(*actor);
+
+        actor->m_properties.apply(prop::make(prop::Id::cloaked));
+
+        if (can_player_see_actor_before) {
+            reveal();
+        }
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Slowing pylon
+// -----------------------------------------------------------------------------
+std::string PylonSlow::name(Article article) const
+{
+    std::string str;
+
+    if (article == Article::a) {
+        str = "a";
+    }
+    else {
+        str = "the";
+    }
+
+    return str + " Slowing Pylon";
+}
+
+std::string PylonSlow::effect_descr() const
+{
+    return "slows creatures";
+}
+
+void PylonSlow::on_new_turn()
+{
+    const std::vector<actor::Actor*> actors = living_actors_reached();
+
+    for (actor::Actor* actor : actors) {
+        if (actor->m_properties.has(prop::Id::slowed)) {
+            continue;
+        }
+
+        actor->m_properties.apply(
+            prop::make(prop::Id::slowed));
+
+        if (actor::can_player_see_actor(*actor)) {
+            reveal();
+        }
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Hasting pylon
+// -----------------------------------------------------------------------------
+std::string PylonHaste::name(Article article) const
+{
+    std::string str;
+
+    if (article == Article::a) {
+        str = "an";
+    }
+    else {
+        str = "the";
+    }
+
+    return str + " Accelerating Pylon";
+}
+
+std::string PylonHaste::effect_descr() const
+{
+    return "accelerates creatures";
+}
+
+void PylonHaste::on_new_turn()
+{
+    const std::vector<actor::Actor*> actors = living_actors_reached();
+
+    for (actor::Actor* actor : actors) {
+        if (actor->m_properties.has(prop::Id::hasted)) {
+            continue;
+        }
+
+        actor->m_properties.apply(
+            prop::make(prop::Id::hasted));
+
+        if (actor::can_player_see_actor(*actor)) {
+            reveal();
+        }
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Knockback pylon
+// -----------------------------------------------------------------------------
+std::string PylonKnockback::name(Article article) const
+{
+    std::string str;
+
+    if (article == Article::a) {
+        str = "a";
+    }
+    else {
+        str = "the";
+    }
+
+    return str + " Repelling Pylon";
+}
+
+std::string PylonKnockback::effect_descr() const
+{
+    return "repels creatures";
+}
+
+void PylonKnockback::on_new_turn()
+{
+    // Occasionally do not run the effect
+    if (rnd::one_in(4)) {
+        return;
+    }
+
+    const std::vector<actor::Actor*> actors = living_actors_reached();
+
+    for (actor::Actor* actor : actors) {
+        // NOTE: Creatures being knocked down into chasms is ignored here. There are
+        // situations where the player could see the pylon, and see the monster fall into a
+        // chasm, but not see the origin position of the monster, but that should be an
+        // extremely obscure/unlikely situation.
+
+        // NOTE: For normal knockbacks (not into chasms), the message is printed when the
+        // monster is in their original position.
+
+        const bool is_mon_noticed =
+            actor::can_player_see_actor(*actor) ||
+            (actor::is_player_aware_of_me(*actor) && map::g_seen.at(actor->m_pos));
+
+        const P pos_before = actor->m_pos;
+
+        knockback::run(
+            *actor,
+            m_pos,
+            knockback::KnockbackSource::other,
+            Verbose::yes,
+            2);  // Extra paralyze turns
+
+        const bool is_pos_updated = (actor->m_pos != pos_before);
+
+        const bool is_pylon_seen = map::g_seen.at(m_pos);
+
+        if (is_mon_noticed && is_pos_updated && is_pylon_seen) {
+            reveal();
+        }
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Teleport pylon
+// -----------------------------------------------------------------------------
+std::string PylonTeleport::name(Article article) const
+{
+    std::string str;
+
+    if (article == Article::a) {
+        str = "a";
+    }
+    else {
+        str = "the";
+    }
+
+    return str + " Teleporting Pylon";
+}
+
+std::string PylonTeleport::effect_descr() const
+{
+    return "teleports creatures";
+}
+
+void PylonTeleport::on_new_turn()
+{
+    // Occasionally do not run the effect
+    if (rnd::coin_toss()) {
+        return;
+    }
+
+    const std::vector<actor::Actor*> actors = living_actors_reached();
+
+    const int max_dist = 15;
+
+    for (actor::Actor* const actor : actors) {
+        const bool can_player_see_actor_before =
+            actor::can_player_see_actor(*actor);
+
+        teleport(*actor, ShouldCtrlTele::if_tele_ctrl_prop, max_dist);
+
+        if (can_player_see_actor_before) {
+            reveal();
+        }
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Terrify Pylon
+// -----------------------------------------------------------------------------
+std::string PylonTerrify::name(Article article) const
+{
+    std::string str;
+
+    if (article == Article::a) {
+        str = "a";
+    }
+    else {
+        str = "the";
+    }
+
+    return str + " Terror Pylon";
+}
+
+std::string PylonTerrify::effect_descr() const
+{
+    return "causes fear";
+}
+
+void PylonTerrify::on_new_turn()
+{
+    const std::vector<actor::Actor*> actors = living_actors_reached();
+
+    for (actor::Actor* actor : actors) {
+        if (actor->m_properties.has(prop::Id::terrified)) {
+            continue;
+        }
+
+        actor->m_properties.apply(
+            prop::make(prop::Id::terrified));
+
+        if (actor::can_player_see_actor(*actor)) {
+            reveal();
+        }
+    }
+}
+
+}  // namespace pylon
+
+// -----------------------------------------------------------------------------
+// Pylon
+// -----------------------------------------------------------------------------
+Pylon::Pylon(const P& p, const TerrainData* const data) :
+    Terrain(p, data),
+    m_pylon_impl(nullptr)
+{
+    const auto id =
+        (pylon::PylonId)rnd::range(
+            0,
+            (int)pylon::PylonId::END - 1);
+
+    m_pylon_impl.reset(make_pylon_impl_from_id(id));
+}
+
+pylon::PylonImpl* Pylon::make_pylon_impl_from_id(const pylon::PylonId id)
+{
+    switch (id) {
+    case pylon::PylonId::invis:
+        return new pylon::PylonInvis(id, m_pos);
+
+    case pylon::PylonId::slow:
+        return new pylon::PylonSlow(id, m_pos);
+
+    case pylon::PylonId::haste:
+        return new pylon::PylonHaste(id, m_pos);
+
+    case pylon::PylonId::knockback:
+        return new pylon::PylonKnockback(id, m_pos);
+
+    case pylon::PylonId::terrify:
+        return new pylon::PylonTerrify(id, m_pos);
+
+    case pylon::PylonId::teleport:
+        return new pylon::PylonTeleport(id, m_pos);
+
+    case pylon::PylonId::END:
+        break;
+    }
+
+    ASSERT(false);
+
+    return nullptr;
+}
+
+gfx::TileId Pylon::tile() const
+{
+    if (!m_pylon_impl) {
+        ASSERT(false);
+
+        return (gfx::TileId)0;
+    }
+
+    const PylonAppearance& appearance =
+        get_appearance_for_id(m_pylon_impl->id());
+
+    return appearance.tile;
+}
+
+Color Pylon::color_default() const
+{
+    if (!m_pylon_impl) {
+        ASSERT(false);
+
+        return {};
+    }
+
+    const PylonAppearance& appearance =
+        get_appearance_for_id(m_pylon_impl->id());
+
+    return appearance.color;
+}
+
+std::string Pylon::name(const Article article) const
+{
+    if (!m_pylon_impl) {
+        ASSERT(false);
+
+        return {};
+    }
+
+    std::string str;
+
+    if (is_identified(m_pylon_impl->id())) {
+        str = m_pylon_impl->name(article);
+    }
+    else {
+        str = get_fake_name(m_pylon_impl->id(), article);
+    }
+
+    return str;
+}
+
+void Pylon::hit(
+    DmgType dmg_type,
+    actor::Actor* actor,
+    const P& from_pos,
+    int dmg)
+{
+    (void)actor;
+    (void)from_pos;
+    (void)dmg;
+
+    switch (dmg_type) {
+    case DmgType::explosion:
+    case DmgType::pure:      {
+        if (map::g_seen.at(m_pos)) {
+            const std::string terrain_name =
+                text_format::first_to_upper(
+                    this->name(Article::the));
+
+            msg_log::add(terrain_name + " is destroyed.");
+        }
+
+        map::update_terrain(make(Id::rubble_low, m_pos));
+    } break;
+
+    default: {
+    } break;
+    }
+}
+
+void Pylon::on_new_turn_hook()
+{
+    if (!m_pylon_impl) {
+        ASSERT(false);
+
+        return;
+    }
+
+    m_pylon_impl->on_new_turn();
+}
+
+void Pylon::add_light_hook(Array2<bool>& light) const
+{
+    for (const P& d : dir_utils::g_dir_list_w_center) {
+        const P p = m_pos + d;
+
+        light.at(p) = true;
+    }
+}
+
+}  // namespace terrain

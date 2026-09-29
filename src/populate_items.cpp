@@ -1,0 +1,157 @@
+// =============================================================================
+// Copyright Martin Törnqvist <m.tornq@gmail.com>
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// =============================================================================
+
+#include "populate_items.hpp"
+
+#include <algorithm>
+#include <cstddef>
+#include <iterator>
+#include <vector>
+
+#include "actor.hpp"
+#include "array2.hpp"
+#include "global.hpp"
+#include "item_data.hpp"
+#include "item_factory.hpp"
+#include "map.hpp"
+#include "map_parsing.hpp"
+#include "mapgen.hpp"
+#include "player_bon.hpp"
+#include "pos.hpp"
+#include "random.hpp"
+#include "terrain_data.hpp"
+
+// -----------------------------------------------------------------------------
+// Private
+// -----------------------------------------------------------------------------
+static int nr_items()
+{
+    Range range;
+
+    // Make more items early and late game, and fewer mid game.
+    //
+    // Rationale: The player should find a lot of items in the early game to
+    // boost their power early, and in the late game exploration is
+    // extremely dangerous so it should be rewarded.
+    //
+    if (map::g_dlvl <= g_dlvl_last_early_game) {
+        range.set(4, 5);
+    }
+    else if (map::g_dlvl <= g_dlvl_last_mid_game) {
+        range.set(3, 4);
+    }
+    else {
+        range.set(4, 5);
+    }
+
+    TRACE
+        << "Base random range of number of items to spawn on floor: "
+        << range.min << "-" << range.max
+        << "\n";
+
+    int nr = range.roll();
+
+    TRACE << "Rolled '" << nr << "' number of items" << "\n";
+
+    if (player_bon::has_trait(TraitId::treasure_hunter)) {
+        ++nr;
+
+        TRACE
+            << "Treasure Hunter increased number of items to "
+            << "'" << nr << "'."
+            << "\n";
+    }
+
+    return nr;
+}
+
+static std::vector<item::Id> make_item_bucket()
+{
+    std::vector<item::Id> item_bucket;
+    item_bucket.clear();
+
+    for (int i = 0; i < (int)item::Id::END; ++i) {
+        const auto& data = item::g_data[i];
+
+        if (data.type < ItemType::END_OF_EXTRINSIC_ITEMS &&
+            data.spawn_std_range.is_in_range(map::g_dlvl) &&
+            data.allow_spawn &&
+            rnd::percent(data.chance_to_incl_in_spawn_list)) {
+            item_bucket.push_back(item::Id(i));
+        }
+    }
+
+    return item_bucket;
+}
+
+static Array2<bool> make_blocked_map()
+{
+    Array2<bool> result(map::dims());
+
+    map_parsers::BlocksItems()
+        .run(result, result.rect());
+
+    // Liquid doesn't block items, but let's not spawn there...
+    map_parsers::IsAnyOfTerrains(
+        terrain::Id::liquid)
+        .run(result, result.rect(), MapParseMode::append);
+
+    const P& player_p = map::g_player->m_pos;
+
+    result.at(player_p) = true;
+
+    return result;
+}
+
+// -----------------------------------------------------------------------------
+// populate_items
+// -----------------------------------------------------------------------------
+namespace populate_items
+{
+void make_items_on_floor()
+{
+    auto item_bucket = make_item_bucket();
+
+    // Spawn items with a weighted random choice
+
+    // NOTE: Each index in the position vector corresponds to the same index
+    // in the weights vector.
+    std::vector<P> positions;
+
+    std::vector<int> position_weights;
+
+    const auto blocked = make_blocked_map();
+
+    mapgen::make_explore_spawn_weights(blocked, positions, position_weights);
+
+    const int nr = nr_items();
+
+    for (int i = 0; i < nr; ++i) {
+        if (positions.empty() || item_bucket.empty()) {
+            break;
+        }
+
+        const int p_idx = rnd::weighted_choice(position_weights);
+
+        const P& p = positions[p_idx];
+
+        const int item_idx = rnd::range(0, (int)item_bucket.size() - 1);
+
+        const item::Id id = item_bucket[item_idx];
+
+        if (item::g_data[(size_t)id].allow_spawn) {
+            item::make_item_on_floor(id, p);
+
+            positions.erase(std::begin(positions) + p_idx);
+            position_weights.erase(std::begin(position_weights) + p_idx);
+        }
+        else {
+            item_bucket.erase(std::begin(item_bucket) + item_idx);
+        }
+    }
+}
+
+}  // namespace populate_items

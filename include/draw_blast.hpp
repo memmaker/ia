@@ -1,0 +1,36 @@
+// =============================================================================
+// Copyright Martin Törnqvist <m.tornq@gmail.com>
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// =============================================================================
+
+#ifndef DRAW_BLAST_HPP
+#define DRAW_BLAST_HPP
+
+#include <vector>
+
+#include "colors.hpp"
+
+struct P;
+
+namespace actor
+{
+class Actor;
+}  // namespace actor
+
+void draw_blast_at_cells(
+    const std::vector<P>& positions,
+    const Color& color,
+    int delay_div = 2);
+
+void draw_blast_at_seen_cells(
+    const std::vector<P>& positions,
+    const Color& color,
+    int delay_div = 2);
+
+void draw_blast_at_seen_actors(
+    const std::vector<actor::Actor*>& actors,
+    const Color& color,
+    int delay_div = 2);
+
+#endif  // DRAW_BLAST_HPP

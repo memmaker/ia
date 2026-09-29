@@ -1,0 +1,161 @@
+// =============================================================================
+// Copyright Martin Törnqvist <m.tornq@gmail.com>
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// =============================================================================
+
+#include "disarm.hpp"
+
+#include <string>
+
+#include "actor.hpp"
+#include "actor_see.hpp"
+#include "array2.hpp"
+#include "colors.hpp"
+#include "common_text.hpp"
+#include "direction.hpp"
+#include "game_time.hpp"
+#include "map.hpp"
+#include "msg_log.hpp"
+#include "pos.hpp"
+#include "property_data.hpp"
+#include "property_handler.hpp"
+#include "query.hpp"
+#include "state.hpp"
+#include "terrain.hpp"
+#include "terrain_data.hpp"
+#include "terrain_trap.hpp"
+
+// -----------------------------------------------------------------------------
+// Private
+// -----------------------------------------------------------------------------
+static bool handle_player_allowed_disarm_traps()
+{
+    if (!map::g_player->m_properties.allow_see()) {
+        msg_log::add("Not while blind.");
+
+        return false;
+    }
+
+    if (map::g_player->m_properties.has(prop::Id::entangled)) {
+        msg_log::add("Not while entangled.");
+
+        return false;
+    }
+
+    if (map::g_player->m_properties.has(prop::Id::stuck)) {
+        msg_log::add("Not while stuck.");
+
+        return false;
+    }
+
+    return true;
+}
+
+static void try_disarm_terrain_at(const P& pos)
+{
+    if (!map::g_seen.at(pos)) {
+        msg_log::add("I cannot see there.");
+
+        return;
+    }
+
+    terrain::Terrain* const terrain = map::g_terrain.at(pos);
+
+    terrain::Trap* trap = nullptr;
+
+    if (terrain->id() == terrain::Id::trap) {
+        trap = static_cast<terrain::Trap*>(terrain);
+    }
+
+    if (!trap || trap->is_hidden()) {
+        msg_log::add(
+            common_text::g_disarm_no_trap,
+            colors::text(),
+            MsgInterruptPlayer::no,
+            MorePromptOnMsg::no,
+            CopyToMsgHistory::no);
+
+        states::draw();
+
+        return;
+    }
+
+    // There is a known and seen trap here.
+
+    if (trap->is_sigil()) {
+        msg_log::add("It cannot be removed through normal means.");
+
+        return;
+    }
+
+    const actor::Actor* const actor_on_trap = map::living_actor_at(pos);
+
+    if (actor_on_trap && !actor::is_player(actor_on_trap)) {
+        if (can_player_see_actor(*actor_on_trap)) {
+            msg_log::add("It's blocked.");
+        }
+        else {
+            msg_log::add("Something is blocking it.");
+        }
+
+        return;
+    }
+
+    const bool did_disarm = trap->disarm();
+
+    if (did_disarm) {
+        game_time::tick();
+    }
+}
+
+// -----------------------------------------------------------------------------
+// disarm
+// -----------------------------------------------------------------------------
+namespace disarm
+{
+void player_disarm()
+{
+    const bool is_allowed = handle_player_allowed_disarm_traps();
+
+    if (!is_allowed) {
+        return;
+    }
+
+    const std::string hint =
+        common_text::g_direction_query +
+        " " +
+        common_text::g_cancel_hint;
+
+    msg_log::add(
+        hint,
+        colors::light_white(),
+        MsgInterruptPlayer::no,
+        MorePromptOnMsg::no,
+        CopyToMsgHistory::no);
+
+    const Dir input_dir = query::dir(AllowCenter::yes);
+
+    msg_log::clear();
+
+    if (input_dir == Dir::END) {
+        return;
+    }
+
+    const P pos = map::g_player->m_pos + dir_utils::offset(input_dir);
+
+    try_disarm_terrain_at(pos);
+}
+
+void player_disarm_at_pos(const P& pos)
+{
+    const bool is_allowed = handle_player_allowed_disarm_traps();
+
+    if (!is_allowed) {
+        return;
+    }
+
+    try_disarm_terrain_at(pos);
+}
+
+}  // namespace disarm

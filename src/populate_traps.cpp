@@ -1,0 +1,207 @@
+// =============================================================================
+// Copyright Martin Törnqvist <m.tornq@gmail.com>
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// =============================================================================
+
+#include "populate_traps.hpp"
+
+#include <algorithm>
+#include <functional>
+#include <ostream>
+#include <vector>
+
+#include "actor.hpp"
+#include "array2.hpp"
+#include "debug.hpp"
+#include "map.hpp"
+#include "map_parsing.hpp"
+#include "pos.hpp"
+#include "random.hpp"
+#include "rect.hpp"
+#include "room.hpp"
+#include "terrain.hpp"
+#include "terrain_data.hpp"
+#include "terrain_factory.hpp"
+#include "terrain_trap.hpp"
+
+// -----------------------------------------------------------------------------
+// Private
+// -----------------------------------------------------------------------------
+static Fraction chance_for_trapped_room(const room::RoomType type)
+{
+    Fraction chance(-1, -1);
+
+    switch (type) {
+    case room::RoomType::plain:
+        chance = {1, 20};
+        break;
+
+    case room::RoomType::human:
+        chance = {1, 12};
+        break;
+
+    case room::RoomType::ritual:
+        chance = {1, 12};
+        break;
+
+    case room::RoomType::spider:
+        // NOTE: Spider rooms place webs themselves.
+        break;
+
+    case room::RoomType::crypt:
+        chance = {1, 12};
+        break;
+
+    case room::RoomType::monster:
+        chance = {1, 30};
+        break;
+
+    case room::RoomType::chasm:
+        chance = {1, 30};
+        break;
+
+    case room::RoomType::damp:
+        chance = {1, 30};
+        break;
+
+    case room::RoomType::pool:
+        chance = {1, 30};
+        break;
+
+    case room::RoomType::jail:
+        chance = {1, 30};
+        break;
+
+    case room::RoomType::corridor:
+    case room::RoomType::crawling_pit:
+    case room::RoomType::forest:
+    case room::RoomType::cave:
+    case room::RoomType::END_OF_STD_ROOMS:
+    case room::RoomType::river:
+    case room::RoomType::crumble_room:
+        break;
+    }
+
+    return chance;
+}
+
+static std::vector<P> find_allowed_positions_in_room(
+    const room::Room& room,
+    const Array2<bool>& blocked)
+{
+    std::vector<P> positions;
+
+    const auto r = room.m_r;
+
+    positions.reserve(r.area());
+
+    for (int x = r.p0.x; x <= r.p1.x; ++x) {
+        for (int y = r.p0.y; y <= r.p1.y; ++y) {
+            const P p(x, y);
+
+            if (!blocked.at(p) &&
+                map::g_terrain.at(p)->can_have_trap() &&
+                (map::g_room_map.at(p) == &room)) {
+                positions.push_back(p);
+            }
+        }
+    }
+
+    return positions;
+}
+
+// -----------------------------------------------------------------------------
+// populate_std_lvl
+// -----------------------------------------------------------------------------
+namespace populate_traps
+{
+void populate()
+{
+    TRACE_FUNC_BEGIN;
+
+    Array2<bool> blocked(map::dims());
+
+    map_parsers::BlocksWalking(ParseActors::no)
+        .run(blocked, blocked.rect());
+
+    const P& player_p = map::g_player->m_pos;
+
+    blocked.at(player_p) = true;
+
+    for (room::Room* const room : map::g_room_list) {
+        const Fraction chance_trapped = chance_for_trapped_room(room->m_type);
+
+        if ((chance_trapped.num == -1) || !chance_trapped.roll()) {
+            continue;
+        }
+
+        auto trap_pos_bucket = find_allowed_positions_in_room(*room, blocked);
+
+        rnd::shuffle(trap_pos_bucket);
+
+        const int nr_traps =
+            std::min(
+                rnd::range(1, 3),
+                (int)trap_pos_bucket.size());
+
+        for (int i = 0; i < nr_traps; ++i) {
+            const terrain::TrapId trap_type = terrain::TrapId::any;
+
+            const auto pos = trap_pos_bucket[i];
+
+            terrain::Trap* const trap = try_make_trap(trap_type, pos);
+
+            if (trap) {
+                map::set_terrain(trap);
+            }
+        }
+    }  // room loop
+
+    TRACE_FUNC_END;
+}
+
+terrain::Trap* try_make_trap(const terrain::TrapId id, const P& pos)
+{
+    const terrain::Terrain* const terrain_here = map::g_terrain.at(pos);
+
+    if (!terrain_here->can_have_trap()) {
+        TRACE
+            << "Cannot place trap on terrain id: "
+            << (int)terrain_here->id() << "\n"
+            << "Trap id: "
+            << int(id) << "\n";
+
+        ASSERT(false);
+
+        return nullptr;
+    }
+
+    auto* const trap =
+        static_cast<terrain::Trap*>(
+            terrain::make(terrain::Id::trap, pos));
+
+    // Set up mimic terrain
+
+    terrain::Terrain* const mimic = terrain::make(terrain_here->id(), pos);
+
+    if (terrain_here->id() == terrain::Id::floor) {
+        // The terrain to mimic is a floor, set correct floor type.
+        static_cast<terrain::Floor*>(mimic)->m_type =
+            static_cast<const terrain::Floor*>(terrain_here)->m_type;
+    }
+
+    trap->set_mimic_terrain(mimic);
+
+    const bool is_trap_ok = trap->try_init_type(id);
+
+    if (!is_trap_ok) {
+        delete trap;
+
+        return nullptr;
+    }
+
+    return trap;
+}
+
+}  // namespace populate_traps
