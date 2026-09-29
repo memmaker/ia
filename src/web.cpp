@@ -12,6 +12,7 @@
 
 #include <SDL.h>
 #include <algorithm>
+#include <cctype>
 #include <cstdio>
 #include <cstdlib>
 #include <string>
@@ -33,6 +34,13 @@
 // clang-format off
 EM_JS(void, web_js_send, (int kind, const char* s), {
     if (Module.onGame) Module.onGame(kind, UTF8ToString(s));
+});
+EM_JS(void, web_js_report, (const char* q), {
+    try {
+        var s = UTF8ToString(q);
+        if (window.RvipWM && RvipWM.report) RvipWM.report(s);
+        else fetch('/roguelikes/beacon?' + s, { keepalive: true, mode: 'no-cors' }).catch(function () {});
+    } catch (e) {}
 });
 EM_JS(void, web_js_sync, (), {
     if (Module.onSync) Module.onSync();
@@ -700,6 +708,56 @@ void config_override(int& window_px_w, int& window_px_h, int& scale, bool& fulls
     }
 }
 
+
+namespace
+{
+std::string s_killer;
+
+std::string url_enc(const std::string& v)
+{
+    static const char* hex = "0123456789ABCDEF";
+    std::string out;
+    for (const unsigned char c : v) {
+        if (isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~') {
+            out += (char)c;
+        } else {
+            out += '%';
+            out += hex[c >> 4];
+            out += hex[c & 15];
+        }
+    }
+    return out;
+}
+}  // namespace
+
+void set_killer(const std::string& name_a)
+{
+    std::string k = name_a;
+    for (const char* art : {"a ", "an ", "the ", "A ", "An ", "The "}) {
+        const std::string a = art;
+        if (k.compare(0, a.size(), a) == 0) {
+            k = k.substr(a.size());
+            break;
+        }
+    }
+    s_killer = k;
+}
+
+void report_run(const char* ev, const std::string& name, int score, int depth, int turns, int lvl)
+{
+    std::string q = "g=ia&ev=" + std::string(ev);
+    if (!name.empty()) {
+        q += "&name=" + url_enc(name);
+    }
+    if (std::string(ev) == "death" && !s_killer.empty()) {
+        q += "&killer=" + url_enc(s_killer);
+    }
+    q += "&depth=" + std::to_string(depth) + "&score=" + std::to_string(score) +
+        "&turns=" + std::to_string(turns) + "&lvl=" + std::to_string(lvl);
+    s_killer.clear();
+    web_js_report(q.c_str());
+}
+
 }  // namespace web
 
 #else  // Native: nothing to do
@@ -719,6 +777,8 @@ bool poll() { return false; }
 void on_window_size() {}
 void sync() {}
 void config_override(int&, int&, int&, bool&) {}
+void set_killer(const std::string&) {}
+void report_run(const char*, const std::string&, int, int, int, int) {}
 }  // namespace web
 
 #endif  // __EMSCRIPTEN__

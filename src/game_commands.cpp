@@ -4,6 +4,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // =============================================================================
 
+#include "highscore.hpp"
+#include "web.hpp"
 #include "game_commands.hpp"
 
 #include <algorithm>
@@ -107,6 +109,19 @@ static void query_quit()
         .run();
 
     if (choice == 1) {
+        {
+            const HighscoreEntry e =
+                highscore::make_entry_from_current_session();
+
+            web::report_run(
+                "quit",
+                e.name,
+                e.calculate_score(),
+                e.dlvl,
+                e.turn_count,
+                e.lvl);
+        }
+
         // Choosing to quit the game deletes the save
         saving::erase_save();
 

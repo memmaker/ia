@@ -56,6 +56,11 @@ void sync();
 // Page-chosen window size and video scale, read over the config file.
 void config_override(int& window_px_w, int& window_px_h, int& scale, bool& fullscreen);
 
+// Run report (graveyard beacon): the monster that last hit the player ("" =
+// no monster), and one report per ended run (ev = death, win or quit).
+void set_killer(const std::string& name_a);
+void report_run(const char* ev, const std::string& name, int score, int depth, int turns, int lvl);
+
 }  // namespace web
 
 #endif  // WEB_HPP

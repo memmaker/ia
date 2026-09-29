@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // =============================================================================
 
+#include "web.hpp"
 #include "game_over.hpp"
 
 #include <memory>
@@ -50,6 +51,15 @@ void on_game_over()
             game_summary_file_path);
 
     highscore::append_entry_to_highscores_file(highscore_entry);
+
+    // Graveyard beacon: before the summary/high score key waits.
+    web::report_run(
+        (highscore_entry.is_win == IsWin::yes) ? "win" : "death",
+        highscore_entry.name,
+        highscore_entry.calculate_score(),
+        highscore_entry.dlvl,
+        highscore_entry.turn_count,
+        highscore_entry.lvl);
 
     // Collect data from the game session.
     const game_summary_data::GameSummaryData game_data =

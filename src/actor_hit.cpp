@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // =============================================================================
 
+#include "web.hpp"
 #include "actor_hit.hpp"
 
 #include <algorithm>
@@ -392,6 +393,11 @@ void hit(
     actor::Actor* const attacker,
     const AllowWound allow_wound)
 {
+    if (is_player(&actor)) {
+        web::set_killer(
+            (attacker && !is_player(attacker)) ? attacker->m_data->name_a : "");
+    }
+
     if (actor.m_state == ActorState::destroyed) {
         return;
     }
@@ -484,6 +490,11 @@ void hit_sp(
     actor::Actor* const attacker,
     const Verbose verbose)
 {
+    if (is_player(&actor)) {
+        web::set_killer(
+            (attacker && !is_player(attacker)) ? attacker->m_data->name_a : "");
+    }
+
     if (verbose == Verbose::yes) {
         if (actor::is_player(&actor)) {
             msg_log::add(
